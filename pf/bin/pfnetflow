@@ -1,0 +1,128 @@
+#!/usr/bin/perl
+
+=head1 NAME
+
+pfnetflow - listen to netflow traffic and create PF violations
+
+=head1 SYNOPSIS
+
+pfnetflow -i <interface> -p <port> [options]
+
+ Options:
+   -d     Daemonize
+   -h     Help
+
+=cut
+
+use strict;
+use warnings;
+use Getopt::Std;
+use File::Basename qw(basename);
+use POSIX qw(:signal_h);
+use Log::Log4perl;
+use Pod::Usage;
+
+use constant INSTALL_DIR => '/usr/local/pf';
+
+use lib INSTALL_DIR . "/lib";
+use pf::db;
+use pf::config;
+use pf::util;
+
+Log::Log4perl->init( INSTALL_DIR . "/conf/log.conf" );
+my $logger = Log::Log4perl->get_logger( basename($0) );
+Log::Log4perl::MDC->put( 'proc', basename($0) );
+Log::Log4perl::MDC->put( 'tid',  0 );
+
+POSIX::sigaction(
+    &POSIX::SIGHUP,
+    POSIX::SigAction->new('normal_sighandler', POSIX::SigSet->new(), &POSIX::SA_NODEFER)
+) or $logger->logdie("pfnetflow: could not set SIGHUP handler: $!");
+
+POSIX::sigaction(
+    &POSIX::SIGTERM,
+    POSIX::SigAction->new('normal_sighandler', POSIX::SigSet->new(), &POSIX::SA_NODEFER)
+) or $logger->logdie("pfnetflow: could not set SIGTERM handler: $!");
+
+POSIX::sigaction(
+    &POSIX::SIGINT,
+    POSIX::SigAction->new('normal_sighandler', POSIX::SigSet->new(), &POSIX::SA_NODEFER)
+) or $logger->logdie("pfnetflow: could not set SIGINT handler: $!");
+
+
+my @ORIG_ARGV = @ARGV;
+my %args;
+getopts( 'dhi:p:', \%args );
+
+my $daemonize = $args{d};
+my $interface = $args{i};
+my $port      = $args{p};
+my $script    = basename($0);
+
+pod2usage( -verbose => 1 ) if ( $args{h} || !($args{p} && $args{i}) );
+
+daemonize() if ($daemonize);
+
+$logger->info("initialized");
+
+# TODO can I bind on port here? if not bail out with logdie if you can report on info
+
+# TODO main loop here!
+
+END {
+    deletepid();
+
+    # TODO free resources
+}
+
+exit(0);
+
+sub daemonize {
+    chdir '/' or $logger->logdie("Can't chdir to /: $!");
+    open STDIN, '<', '/dev/null'
+        or $logger->logdie("Can't read /dev/null: $!");
+    my $log_file = "$install_dir/logs/pfnetflow";
+    open STDOUT, '>>', $log_file
+        or $logger->logdie("Can't write to $log_file: $!");
+
+    defined( my $pid = fork )
+        or $logger->logdie("pfnetflow: could not fork: $!");
+    POSIX::_exit(0) if ($pid);
+    if ( !POSIX::setsid() ) {
+        $logger->warn("could not start a new session: $!");
+    }
+    open STDERR, '>&STDOUT' or $logger->logdie("Can't dup stdout: $!");
+    createpid();
+}
+
+sub normal_sighandler {
+    deletepid();
+    $logger->logdie( "caught SIG" . $_[0] . " - terminating" );
+}
+
+
+=head1 AUTHOR
+
+Olivier Bilodeau <obilodeau@inverse.ca>
+
+=head1 COPYRIGHT
+
+Copyright (C) 2009 Inverse inc.
+
+This program is free software; you can redistribute it and/or
+modify it under the terms of the GNU General Public License
+as published by the Free Software Foundation; either version 2
+of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program; if not, write to the Free Software
+Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301,
+USA.
+
+=cut
+

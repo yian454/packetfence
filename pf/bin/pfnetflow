@@ -21,6 +21,8 @@ use File::Basename qw(basename);
 use POSIX qw(:signal_h);
 use Log::Log4perl;
 use Pod::Usage;
+use Net::Flow qw(decode) ;
+use IO::Socket::INET;
 
 use constant INSTALL_DIR => '/usr/local/pf';
 
@@ -68,6 +70,99 @@ $logger->info("initialized");
 # TODO can I bind on port here? if not bail out with logdie if you can report on info
 
 # TODO main loop here!
+
+my $packet = undef ;
+my $TemplateArrayRef = undef ;
+#TODO: honor the -i parameter from CLI
+my $sock = IO::Socket::INET->new(LocalPort => $port, Proto => 'udp') ;
+
+while ($sock->recv($packet,1548)) {
+   print "------------------------------------------------------------------------\n"; 
+   print "received flow from: ". $sock->peerhost() . "\n";
+
+   my ($HeaderHashRef,$FlowArrayRef,$ErrorsArrayRef)=() ;
+
+     ( $HeaderHashRef,
+       $TemplateArrayRef,
+       $FlowArrayRef,
+       $ErrorsArrayRef)
+       = Net::Flow::decode(
+                           \$packet,
+                           $TemplateArrayRef
+                           ) ;
+
+   # TODO: ERROR-HANDLING:
+   # grep{ print "$_\n" }@{$ErrorsArrayRef} if( @{$ErrorsArrayRef} ) ;
+
+  # print "\n- Header Information -\n" ;
+   foreach my $Key ( sort keys %{$HeaderHashRef} ){
+      # printf " %s = %3d\n",$Key,$HeaderHashRef->{$Key} ;
+   }
+
+   foreach my $TemplateRef ( @{$TemplateArrayRef} ){
+     #  print "\n-- Template Information --\n" ;
+
+       foreach my $TempKey ( sort keys %{$TemplateRef} ){
+           if( $TempKey eq "Template" ){
+             #  printf "  %s = \n",$TempKey ;
+               foreach my $Ref ( @{$TemplateRef->{Template}}  ){
+                   foreach my $Key ( keys %{$Ref} ){
+                    #   printf "   %s=%s", $Key, $Ref->{$Key} ;
+                   }
+                  # print "\n" ;
+               }
+           }else{
+               #printf "  %s = %s\n", $TempKey, $TemplateRef->{$TempKey} ;
+           }
+       }
+   }
+
+   if (!@{$TemplateArrayRef}) {
+      print "I have not received a template yet, I don't know how to parse the netflow\n";
+   } else {
+
+      print "------------------------------------------------------------------------\n";
+      print "Size\t#pkts\tsrcip\t\tsrcport\tdstip\t\tdstport\tsrcmac\t\t\tdstmac\t\t\tnexthop\n";
+   }
+
+   foreach my $FlowRef ( @{$FlowArrayRef} ){
+     #print "\n-- Flow Information --\n" ;
+   my $tmp_start_time = hex(unpack("H*",$FlowRef->{22}));
+   my $start_time = substr(($tmp_start_time),0,
+   length($tmp_start_time) - 3) . substr(($tmp_start_time),
+   length($tmp_start_time) - 3,3);
+
+
+   my $tmp_end_time = hex(unpack("H*",$FlowRef->{21}));
+   my $end_time = substr(($tmp_end_time),0, length($tmp_end_time) -
+3) . substr(($tmp_end_time), length($tmp_end_time) - 3,3);
+   my $numberOfPackets = hex(unpack("H*",$FlowRef->{10}));
+
+
+   my $nexthop = join('.', unpack('CCCC',$FlowRef->{15}));
+
+   if($numberOfPackets ne "0"){
+     my $data;
+     $start_time += $HeaderHashRef->{"UnixSecs"} * 1000;
+     $end_time += $HeaderHashRef->{"UnixSecs"} * 1000;
+
+     #$data = "FLOW $start_time $end_time ";
+     #$data = $data . hex(unpack("H*",$FlowRef->{1})) . "\t";                       # Size of Flow
+     $data = hex(unpack("H*",$FlowRef->{1})) . "\t";                                # Size of Flow
+     $data = $data . $numberOfPackets . "\t";                                       # Number of packets
+     $data = $data . join('.', unpack('CCCC',$FlowRef->{8})) . "\t";                # Source Address
+     $data = $data . hex(unpack("H*",$FlowRef->{7})) . "\t";                        # Source Port
+     $data = $data . join('.', unpack('CCCC',$FlowRef->{12})) . "\t";               # Destination Address
+     $data = $data . hex(unpack("H*",$FlowRef->{11})) . "\t";                       # Destination Port
+     $data = $data . join(':', unpack('H2 H2 H2 H2 H2 H2', $FlowRef->{56})) . "\t"; # Source MAC Address
+     $data = $data . join(':', unpack('H2 H2 H2 H2 H2 H2', $FlowRef->{57})) . "\t"; # Destination MAC Address
+     $data = $data . join('.', unpack('CCCC',$FlowRef->{15})) . "\n";               # Next Hop Address
+
+     print $data;
+   }
+}
+}
+
 
 END {
     deletepid();

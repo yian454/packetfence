@@ -67,14 +67,14 @@ daemonize() if ($daemonize);
 
 $logger->info("initialized");
 
-# TODO can I bind on port here? if not bail out with logdie if you can report on info
+my $packet = undef;
+my $TemplateArrayRef = undef;
+#TODO: honor the -i parameter from CLI, wait do we really need that?
+#I think its easier with an IP param (that we can grab from pf.conf)
+my $sock = IO::Socket::INET->new(LocalPort => $port, Proto => 'udp')
+  or $logger->logdie("Can't bind to UDP port $port. Netflow analysis stopped. OS error: $!");
 
-# TODO main loop here!
-
-my $packet = undef ;
-my $TemplateArrayRef = undef ;
-#TODO: honor the -i parameter from CLI
-my $sock = IO::Socket::INET->new(LocalPort => $port, Proto => 'udp') ;
+$logger->info("Listening on UDP $port. Netflow analysis started.");
 
 while ($sock->recv($packet,1548)) {
     print "------------------------------------------------------------------------\n"; 

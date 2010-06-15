@@ -4,7 +4,7 @@ use strict;
 use warnings;
 use diagnostics;
 
-use Test::More tests => 69;
+use Test::More tests => 70;
 use Log::Log4perl;
 use File::Basename qw(basename);
 use lib '/usr/local/pf/lib';
@@ -140,7 +140,11 @@ is_deeply(\%cmd,
 
 %cmd = pf::pfcmd::parseCommandLine('nodecategory view all');
 is_deeply(\%cmd,
-          { 'command' => [ 'nodecategory', 'view', 'all' ] },
+          { 'command' 
+                => [ 'nodecategory', 'view', 'all' ],
+            'nodecategory_options'
+              => [ 'view', 'all' ]
+          },
           'pfcmd nodecategory view all');
 
 %cmd = pf::pfcmd::parseCommandLine('person view all');
@@ -180,6 +184,11 @@ is_deeply(\%cmd,
 is_deeply(\%cmd,
           { 'command' => [ 'switchconfig', 'get', 'all' ] },
           'pfcmd switchconfig get all');
+
+%cmd = pf::pfcmd::parseCommandLine('floatingnetworkdeviceconfig get all');
+is_deeply(\%cmd,
+          { 'command' => [ 'floatingnetworkdeviceconfig', 'get', 'all' ] },
+          'pfcmd floatingnetworkdeviceconfig get all');
 
 %cmd = pf::pfcmd::parseCommandLine('traplog update');
 is_deeply(\%cmd,
@@ -238,7 +247,7 @@ foreach my $help_arg (@main_args) {
 
 # test version
 @output = `/usr/local/pf/bin/pfcmd version`;
-like ( $output[0], qr/^PacketFence 1.8.6/,
-       "pfcmd version is 1.8.6" );
+like ( $output[0], qr/^PacketFence trunk/,
+       "pfcmd version is correct" );
 like ( $output[1], qr/^DB MD5SUM: a3ad9f52b7d31c8d4b5e9b0c2c3dd559/,
        "DB MD5SUM" );

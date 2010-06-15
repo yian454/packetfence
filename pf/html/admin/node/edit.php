@@ -28,7 +28,12 @@
     }
     $edit_cmd.=implode(", ", $parts);
 
-    PFCMD($edit_cmd);
+    # I REALLLLYY mean false (avoids 0, empty strings and empty arrays to pass here)
+    if (PFCMD($edit_cmd) === false) {
+      # an error was shown by PFCMD now die to avoid closing the popup
+      exit();
+    }
+    # no errors from pfcmd, go on
     $edited=true; 
     print "<script type='text/javascript'>opener.location.reload();window.close();</script>";
 
@@ -48,11 +53,32 @@
     }
 
     $pretty_key = pretty_header("$current_top-view", $key);
-    if($key == 'status'){
+    switch($key) {
+    case 'status':
       print "<tr><td></td><td>$pretty_key:</td><td>";
       printSelect( array('unreg' => 'Unregistered', 'reg' => 'Registered', 'grace' => 'Grace'), 'hash', $val, "name='$key'");
-    }
-    else{
+      break;
+
+    case 'category':
+      print "<tr><td></td><td>$pretty_key:</td><td>";
+      printSelect(get_nodecategories_for_dropdown(), 'hash', $val, "name='$key'");
+      break;
+
+    case 'voip':
+      print "<tr><td></td><td>$pretty_key:</td><td>";
+      printSelect( array('no' => 'No', 'yes' => 'Yes'), 'hash', $val, "name='$key'");
+      break;
+
+    case 'switch':
+    case 'port':
+      print "<tr><td></td><td>$pretty_key:</td><td><input type='text' name='$key' value='$val' disabled>";
+      break;
+
+    case 'connection_type':
+      print "<tr><td></td><td>$pretty_key:</td><td><p title='$val' style='font-size: 0.7em;'>$connection_type[$val]</p>";
+      break;
+
+    default:
       print "<tr><td></td><td>$pretty_key:</td><td><input type='text' name='$key' value='$val'>";
     }
 

@@ -20,108 +20,109 @@ Read the F<pf.conf> configuration file.
 
 use strict;
 use warnings;
+use Log::Log4perl;
 
-our (
-    $action_add_sql,   $action_delete_sql, $action_delete_all_sql,
-    $action_exist_sql, $action_view_sql,   $action_view_all_sql,
-    $action_db_prepared
-);
+use constant ACTION => 'action';
 
 BEGIN {
     use Exporter ();
     our ( @ISA, @EXPORT );
     @ISA = qw(Exporter);
-    @EXPORT
-        = qw(action_db_prepare action_add action_view action_view_all action_delete action_delete_all action_execute action_log);
+    @EXPORT = qw(
+        $action_db_prepared  action_db_prepare
+
+        action_add 
+        action_view          action_view_all
+        action_delete        action_delete_all 
+        action_execute       action_log
+    );
 }
 
-use Log::Log4perl;
 use pf::config;
-use pf::util;
 use pf::db;
+use pf::util;
 use pf::class qw(class_view class_view_actions);
 
-$action_db_prepared = 0;
-
-#action_db_prepare($dbh) if (!$thread);
+# The next two variables and the _prepare sub are required for database handling magic (see pf::db)
+our $action_db_prepared = 0;
+# in this hash reference we hold the database statements. We pass it to the query handler and he will repopulate
+# the hash if required
+our $action_statements = {};
 
 sub action_db_prepare {
-    my ($dbh) = @_;
-    db_connect($dbh);
     my $logger = Log::Log4perl::get_logger('pf::action');
     $logger->debug("Preparing pf::action database queries");
-    $action_add_sql
-        = $dbh->prepare(qq[ insert into action(vid,action) values(?,?) ]);
-    $action_delete_sql
-        = $dbh->prepare(qq[ delete from action where vid=? and action=? ]);
-    $action_delete_all_sql
-        = $dbh->prepare(qq[ delete from action where vid=? ]);
-    $action_exist_sql = $dbh->prepare(
+
+    $action_statements->{'action_add_sql'} = get_db_handle()->prepare(qq[ insert into action(vid,action) values(?,?) ]);
+
+    $action_statements->{'action_delete_sql'} = get_db_handle()->prepare(qq[ delete from action where vid=? and action=? ]);
+
+    $action_statements->{'action_delete_all_sql'} = get_db_handle()->prepare(qq[ delete from action where vid=? ]);
+
+    $action_statements->{'action_exist_sql'} = get_db_handle()->prepare(
         qq[ select vid,action from action where vid=? and action=? ]);
-    $action_view_sql = $dbh->prepare(
+
+    $action_statements->{'action_view_sql'} = get_db_handle()->prepare(
         qq[ select vid,action from action where vid=? and action=? ]);
-    $action_view_all_sql
-        = $dbh->prepare(qq[ select vid,action from action where vid=? ]);
+
+    $action_statements->{'action_view_all_sql'} = get_db_handle()->prepare(qq[ select vid,action from action where vid=? ]);
+
     $action_db_prepared = 1;
 }
 
 sub action_exist {
     my ( $vid, $action ) = @_;
-    action_db_prepare($dbh) if ( !$action_db_prepared );
-    $action_exist_sql->execute( $vid, $action ) || return (0);
-    my ($val) = $action_exist_sql->fetchrow_array();
-    $action_exist_sql->finish();
+    my $query = db_query_execute(ACTION, $action_statements, 'action_exist_sql', $vid, $action) || return (0);
+    my ($val) = $query->fetchrow_array();
+    $query->finish();
     return ($val);
 }
 
 sub action_add {
     my ( $vid, $action ) = @_;
-    action_db_prepare($dbh) if ( !$action_db_prepared );
     my $logger = Log::Log4perl::get_logger('pf::action');
     if ( action_exist( $vid, $action ) ) {
         $logger->warn("attempt to add existing action $action to class $vid");
         return (2);
     }
-    $action_add_sql->execute( $vid, $action ) || return (0);
+    db_query_execute(ACTION, $action_statements, 'action_add_sql', $vid, $action) || return (0);
     $logger->debug("action $action added to class $vid");
     return (1);
 }
 
 sub action_view {
     my ( $vid, $action ) = @_;
-    action_db_prepare($dbh) if ( !$action_db_prepared );
-    $action_view_sql->execute( $vid, $action ) || return (0);
-    my $ref = $action_view_sql->fetchrow_hashref();
+
+    my $query = db_query_execute(ACTION, $action_statements, 'action_view_sql', $vid, $action) || return (0);
+    my $ref = $query->fetchrow_hashref();
 
     # just get one row and finish
-    $action_view_sql->finish();
+    $query->finish();
     return ($ref);
 }
 
 sub action_view_all {
     my ($vid) = @_;
-    action_db_prepare($dbh) if ( !$action_db_prepared );
-    return db_data( $action_view_all_sql, $vid );
+    return db_data(ACTION, $action_statements, 'action_view_all_sql', $vid );
 }
 
 sub action_delete {
     my ( $vid, $action ) = @_;
-    action_db_prepare($dbh) if ( !$action_db_prepared );
     my $logger = Log::Log4perl::get_logger('pf::action');
-    $action_delete_sql->execute( $vid, $action ) || return (0);
+    db_query_execute(ACTION, $action_statements, 'action_delete_sql', $vid, $action) || return (0);
     $logger->debug("action $action deleted from class $vid");
     return (1);
 }
 
 sub action_delete_all {
     my ($vid) = @_;
-    action_db_prepare($dbh) if ( !$action_db_prepared );
     my $logger = Log::Log4perl::get_logger('pf::action');
-    $action_delete_all_sql->execute($vid) || return (0);
+    db_query_execute(ACTION, $action_statements, 'action_delete_all_sql', $vid) || return (0);
     $logger->debug("all actions for class $vid deleted");
     return (1);
 }
 
+# TODO what is that? Isn't it dangerous?
 sub action_api {
     my ( $mac, $vid, $external_id ) = @_;
     my $class_info = class_view($vid);
@@ -152,14 +153,7 @@ sub action_execute {
         } elsif ( $action =~ /^winpopup$/i ) {
             action_winpopup( $mac, $vid );
         } elsif ( $action =~ /^autoreg$/i ) {
-            if ( isenabled( $Config{'trapping'}{'registration'} ) ) {
-                require pf::node;
-                pf::node::node_register_auto($mac);
-            } else {
-                $logger->warn(
-                    "autoreg action defined for violation $vid, but registration disabled"
-                );
-            }
+            action_autoregister($mac, $vid);
         } else {
             $logger->error( "unknown action '$action' for class $vid", 1 );
         }
@@ -260,6 +254,34 @@ sub action_winpopup {
 
 }
 
+sub action_autoregister {
+    my ($mac, $vid) = @_;
+    my $logger = Log::Log4perl::get_logger('pf::action');
+
+    if (isenabled($Config{'trapping'}{'registration'})) {
+
+        require pf::vlan::custom;
+        my $vlan_obj = new pf::vlan::custom();
+        if ($vlan_obj->shouldAutoRegister($mac, 0, 1)) {
+
+            # auto-register
+            # sorry for the weird call, check pf::vlan for this sub's parameters
+            my %autoreg_node_defaults = $vlan_obj->getNodeInfoForAutoReg(undef, undef, $mac, undef, 0, 1);
+            $logger->debug("auto-registering node $mac because of violation action=autoreg");
+
+            require pf::node;
+            if (!pf::node::node_register($mac, $autoreg_node_defaults{'pid'}, %autoreg_node_defaults)) {
+                $logger->error("auto-registration of node $mac failed");
+                return 0;
+            }
+        } else {
+            $logger->info("autoreg action defined for violation $vid, but won't do it: custom config said not to");
+        }
+    } else {
+        $logger->warn("autoreg action defined for violation $vid, but registration disabled");
+    }
+}
+
 =head1 AUTHOR
 
 David Laporte <david@davidlaporte.org>
@@ -276,7 +298,7 @@ Copyright (C) 2005 David Laporte
 
 Copyright (C) 2005 Kevin Amorin
 
-Copyright (C) 2007-2009 Inverse inc.
+Copyright (C) 2007-2010 Inverse inc.
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License

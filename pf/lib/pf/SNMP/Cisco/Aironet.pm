@@ -11,6 +11,12 @@ to access SNMP enabled Aironet access points.
 
 =cut
 
+=head1 BUGS AND LIMITATIONS
+
+Wireless deauthentication (deassociation) uses the CLI (telnet or ssh) which is expensive (doesn't scale very well).
+
+=cut
+
 use strict;
 use warnings;
 use diagnostics;
@@ -22,6 +28,20 @@ use Net::Appliance::Session;
 use Net::SNMP;
 use Data::Dumper;
 
+=head1 SUBROUTINES
+
+TODO: This list is incomplete
+
+=over
+
+=item deauthenticateMac
+
+Warning: this method should _never_ be called in a thread. Net::Appliance::Session is not thread 
+safe: 
+
+L<http://www.cpanforum.com/threads/6909/>
+
+=cut
 sub deauthenticateMac {
     my ( $this, $mac ) = @_;
     my $logger = Log::Log4perl::get_logger( ref($this) );
@@ -148,6 +168,8 @@ sub isVoIPEnabled {
     my ($this) = @_;
     return 0;
 }
+
+=back
 
 =head1 AUTHOR
 

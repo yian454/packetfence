@@ -5,7 +5,7 @@ use warnings;
 use diagnostics;
 
 use Test::Pod;
-use Test::More tests => 119;
+use Test::More tests => 509;
 
 # file list copied from critic.t
 my @files = (
@@ -14,7 +14,8 @@ my @files = (
     '/usr/local/pf/addons/convertToPortSecurity.pl',
     '/usr/local/pf/addons/monitorpfsetvlan.pl',
     '/usr/local/pf/addons/recovery.pl',
-    '/usr/local/pf/addons/802.1X/rlm_perl_packetfence.pl',
+    '/usr/local/pf/addons/802.1X/rlm_perl_packetfence_soap.pl',
+    '/usr/local/pf/addons/802.1X/rlm_perl_packetfence_sql.pl',
     '/usr/local/pf/addons/mrtg/mrtg-wrapper.pl',
     '/usr/local/pf/addons/pfdetect_remote/sbin/pfdetect_remote',
     '/usr/local/pf/bin/flip.pl',
@@ -29,6 +30,8 @@ my @files = (
     '/usr/local/pf/lib/pf/configfile.pm',
     '/usr/local/pf/lib/pf/config.pm',
     '/usr/local/pf/lib/pf/db.pm',
+    '/usr/local/pf/lib/pf/floatingdevice.pm',
+    '/usr/local/pf/lib/pf/floatingdevice/custom.pm',
     '/usr/local/pf/lib/pf/ifoctetslog.pm',
     '/usr/local/pf/lib/pf/iplog.pm',
     '/usr/local/pf/lib/pf/iptables.pm',
@@ -46,6 +49,8 @@ my @files = (
     '/usr/local/pf/lib/pf/pfcmd/pfcmd.pm',
     '/usr/local/pf/lib/pf/pfcmd.pm',
     '/usr/local/pf/lib/pf/pfcmd/report.pm',
+    '/usr/local/pf/lib/pf/radius.pm',
+    '/usr/local/pf/lib/pf/radius/custom.pm',
     '/usr/local/pf/lib/pf/rawip.pm',
     '/usr/local/pf/lib/pf/scan.pm',
     '/usr/local/pf/lib/pf/schedule.pm',
@@ -57,6 +62,7 @@ my @files = (
     '/usr/local/pf/lib/pf/SNMP/Amer/SS2R24i.pm',
     '/usr/local/pf/lib/pf/SNMP/Aruba/Controller_200.pm',
     '/usr/local/pf/lib/pf/SNMP/Aruba.pm',
+    '/usr/local/pf/lib/pf/SNMP/Cisco.pm',
     '/usr/local/pf/lib/pf/SNMP/Cisco/Aironet_1130.pm',
     '/usr/local/pf/lib/pf/SNMP/Cisco/Aironet_1242.pm',
     '/usr/local/pf/lib/pf/SNMP/Cisco/Aironet_1250.pm',
@@ -68,9 +74,12 @@ my @files = (
     '/usr/local/pf/lib/pf/SNMP/Cisco/Catalyst_3500XL.pm',
     '/usr/local/pf/lib/pf/SNMP/Cisco/Catalyst_3550.pm',
     '/usr/local/pf/lib/pf/SNMP/Cisco/Catalyst_3560.pm',
-    '/usr/local/pf/lib/pf/SNMP/Cisco/Controller_4400_4_2_130.pm',
-    '/usr/local/pf/lib/pf/SNMP/Cisco.pm',
+    '/usr/local/pf/lib/pf/SNMP/Cisco/Catalyst_3750.pm',
+    '/usr/local/pf/lib/pf/SNMP/Cisco/ISR_1800.pm',
+    '/usr/local/pf/lib/pf/SNMP/Cisco/WiSM.pm',
     '/usr/local/pf/lib/pf/SNMP/Cisco/WLC_2106.pm',
+    '/usr/local/pf/lib/pf/SNMP/Cisco/WLC_4400.pm',
+    '/usr/local/pf/lib/pf/SNMP/constants.pm',
     '/usr/local/pf/lib/pf/SNMP/Dell.pm',
     '/usr/local/pf/lib/pf/SNMP/Dell/PowerConnect3424.pm',
     '/usr/local/pf/lib/pf/SNMP/Dlink/DES_3526.pm',
@@ -131,5 +140,38 @@ my @files = (
 );
 
 foreach my $currentFile (@files) {
-    pod_file_ok($currentFile);
+    my $shortname = $1 if ($currentFile =~ m'^/usr/local/pf/(.+)$');
+    pod_file_ok($currentFile, "${shortname}'s POD is valid");
 }
+
+# PacketFence module POD
+# for now NAME, AUTHOR, COPYRIGHT
+# TODO expect NAME, SYNOPSIS, DESCRIPTION, AUTHOR, COPYRIGHT
+my @pf_general_pod = qw(NAME AUTHOR COPYRIGHT);
+foreach my $currentFile (@files) {
+    my $shortname = $1 if ($currentFile =~ m'^/usr/local/pf/(.+)$');
+
+    # TODO extract in a method if I re-use
+
+    # basically it extracts <name> out of a perl file POD's =head* <name>
+    # "perl -l00n" comes from the POD section of the camel book, not so sure what it does
+    my $cmd = "cat $currentFile | perl -l00n -e 'print \"\$1\\n\" if /^=head\\d\\s+(\\w+)/;'";
+    my $result = `$cmd`;
+    $result =~ s/\c@//g; # I had these weird control-chars in my string
+    my @pod_headers = split("\n", $result);
+    pop @pod_headers; # discards last element (its always only a newline)
+
+    foreach my $pf_expected_header (@pf_general_pod) {
+        # TODO performance could be improved if I qr// the regexp (see perlop)
+        ok(grep(/^$pf_expected_header$/, @pod_headers), "$shortname POD doc section $pf_expected_header exists");
+    }
+}
+
+# TODO switch module POD
+# expect bugs and limitations, status, ...
+
+# TODO CLI perl
+# expect USAGE
+
+# TODO PacketFence core
+# # expect SUBROUTINES

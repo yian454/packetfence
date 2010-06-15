@@ -5,7 +5,7 @@ use warnings;
 use diagnostics;
 
 use Test::Perl::Critic;
-use Test::More tests => 119;
+use Test::More tests => 123;
 
 # To generate this list, start with this: find lib/pf/ -exec echo "    '/usr/local/pf/{}'," \; | sort
 # TODO: should these really be absolute PATHs? I don't think so!
@@ -15,7 +15,8 @@ my @files = (
     '/usr/local/pf/addons/convertToPortSecurity.pl',
     '/usr/local/pf/addons/monitorpfsetvlan.pl',
     '/usr/local/pf/addons/recovery.pl',
-    '/usr/local/pf/addons/802.1X/rlm_perl_packetfence.pl',
+    '/usr/local/pf/addons/802.1X/rlm_perl_packetfence_soap.pl',
+    '/usr/local/pf/addons/802.1X/rlm_perl_packetfence_sql.pl',
     '/usr/local/pf/addons/mrtg/mrtg-wrapper.pl',
     '/usr/local/pf/addons/pfdetect_remote/sbin/pfdetect_remote',
     '/usr/local/pf/bin/flip.pl',
@@ -30,6 +31,8 @@ my @files = (
     '/usr/local/pf/lib/pf/configfile.pm',
     '/usr/local/pf/lib/pf/config.pm',
     '/usr/local/pf/lib/pf/db.pm',
+    '/usr/local/pf/lib/pf/floatingdevice.pm',
+    '/usr/local/pf/lib/pf/floatingdevice/custom.pm',
     '/usr/local/pf/lib/pf/ifoctetslog.pm',
     '/usr/local/pf/lib/pf/iplog.pm',
     '/usr/local/pf/lib/pf/iptables.pm',
@@ -58,6 +61,7 @@ my @files = (
     '/usr/local/pf/lib/pf/SNMP/Amer/SS2R24i.pm',
     '/usr/local/pf/lib/pf/SNMP/Aruba/Controller_200.pm',
     '/usr/local/pf/lib/pf/SNMP/Aruba.pm',
+    '/usr/local/pf/lib/pf/SNMP/Cisco.pm',
     '/usr/local/pf/lib/pf/SNMP/Cisco/Aironet_1130.pm',
     '/usr/local/pf/lib/pf/SNMP/Cisco/Aironet_1242.pm',
     '/usr/local/pf/lib/pf/SNMP/Cisco/Aironet_1250.pm',
@@ -69,9 +73,12 @@ my @files = (
     '/usr/local/pf/lib/pf/SNMP/Cisco/Catalyst_3500XL.pm',
     '/usr/local/pf/lib/pf/SNMP/Cisco/Catalyst_3550.pm',
     '/usr/local/pf/lib/pf/SNMP/Cisco/Catalyst_3560.pm',
-    '/usr/local/pf/lib/pf/SNMP/Cisco/Controller_4400_4_2_130.pm',
-    '/usr/local/pf/lib/pf/SNMP/Cisco.pm',
+    '/usr/local/pf/lib/pf/SNMP/Cisco/Catalyst_3750.pm',
+    '/usr/local/pf/lib/pf/SNMP/Cisco/ISR_1800.pm',
+    '/usr/local/pf/lib/pf/SNMP/Cisco/WiSM.pm',
     '/usr/local/pf/lib/pf/SNMP/Cisco/WLC_2106.pm',
+    '/usr/local/pf/lib/pf/SNMP/Cisco/WLC_4400.pm',
+    '/usr/local/pf/lib/pf/SNMP/constants.pm',
     '/usr/local/pf/lib/pf/SNMP/Dell.pm',
     '/usr/local/pf/lib/pf/SNMP/Dell/PowerConnect3424.pm',
     '/usr/local/pf/lib/pf/SNMP/Dlink/DES_3526.pm',

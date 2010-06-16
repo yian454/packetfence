@@ -123,8 +123,16 @@ sub parse_flow {
     ($HeaderHashRef, $TemplateArrayRef, $FlowArrayRef, $ErrorsArrayRef)
          = Net::Flow::decode($packet, $TemplateArrayRef);
 
-    # TODO: ERROR-HANDLING:
-    # grep{ print "$_\n" }@{$ErrorsArrayRef} if( @{$ErrorsArrayRef} ) ;
+    # TODO: ERROR-HANDLING of Net::Flow
+    if (@{$ErrorsArrayRef}) {
+        foreach my $error (@{$ErrorsArrayRef}) {
+            if ($error =~ /^WARNING/) {
+                $logger->trace("got a warning from Net::Flow::decode. Usually normal: $error.");
+            } else {
+                $logger->warn("Net::Flow::decode error: $error.");
+            }
+        }
+    }
 
     if (!$templateReceivedFlag && @{$TemplateArrayRef}) {
         $logger->info("Received the template. Flows are now interpreted.");

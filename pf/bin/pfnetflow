@@ -2,7 +2,7 @@
 
 =head1 NAME
 
-pfnetflow - listen to netflow traffic and create PF violations
+pfnetflow - listen to netflow/IPFIX traffic and create PF violations
 
 =head1 SYNOPSIS
 
@@ -10,6 +10,7 @@ pfnetflow -i <interface> -p <port> [options]
 
  Options:
    -d     Daemonize
+   -v     Verbose, print info about headers and templates
    -h     Help
 
 =cut
@@ -54,12 +55,13 @@ POSIX::sigaction(
 
 my @ORIG_ARGV = @ARGV;
 my %args;
-getopts( 'dhi:p:', \%args );
+getopts( 'dhvi:p:', \%args );
 
 my $daemonize = $args{d};
+my $verbose = $args{v};
 my $interface = $args{i};
-my $port      = $args{p};
-my $script    = basename($0);
+my $port = $args{p};
+my $script = basename($0);
 
 pod2usage( -verbose => 1 ) if ( $args{h} || !($args{p} && $args{i}) );
 
@@ -69,6 +71,7 @@ $logger->info("initialized");
 
 my $packet = undef;
 my $TemplateArrayRef = undef;
+my $templateReceivedFlag = 0;
 #TODO: honor the -i parameter from CLI, wait do we really need that?
 #I think its easier with an IP param (that we can grab from pf.conf)
 my $sock = IO::Socket::INET->new(LocalPort => $port, Proto => 'udp')
@@ -77,36 +80,45 @@ my $sock = IO::Socket::INET->new(LocalPort => $port, Proto => 'udp')
 $logger->info("Listening on UDP $port. Netflow analysis started.");
 
 while ($sock->recv($packet,1548)) {
+
     print "------------------------------------------------------------------------\n"; 
     print "received flow from: ". $sock->peerhost() . "\n";
 
-    my ($HeaderHashRef,$FlowArrayRef,$ErrorsArrayRef)=() ;
+    # forces re-init of variables
+    my ($HeaderHashRef,$FlowArrayRef,$ErrorsArrayRef) = ();
 
     ($HeaderHashRef, $TemplateArrayRef, $FlowArrayRef, $ErrorsArrayRef)
-         = Net::Flow::decode( \$packet, $TemplateArrayRef) ;
+         = Net::Flow::decode(\$packet, $TemplateArrayRef) ;
 
     # TODO: ERROR-HANDLING:
     # grep{ print "$_\n" }@{$ErrorsArrayRef} if( @{$ErrorsArrayRef} ) ;
 
-    # print "\n- Header Information -\n" ;
-    foreach my $Key ( sort keys %{$HeaderHashRef} ){
-      # printf " %s = %3d\n",$Key,$HeaderHashRef->{$Key} ;
+    if (!$templateReceivedFlag && @{$TemplateArrayRef}) {
+        print "Received the template. I can now interpret flows!\n";
+        $templateReceivedFlag = 1;
     }
 
-    foreach my $TemplateRef ( @{$TemplateArrayRef} ){
-        # print "\n-- Template Information --\n" ;
- 
-        foreach my $TempKey ( sort keys %{$TemplateRef} ){
-            if( $TempKey eq "Template" ){
-              #  printf "  %s = \n",$TempKey ;
-                foreach my $Ref ( @{$TemplateRef->{Template}}  ){
-                    foreach my $Key ( keys %{$Ref} ){
-                     #   printf "   %s=%s", $Key, $Ref->{$Key} ;
+    if ($verbose) {
+        print "\n- Header Information -\n" ;
+        foreach my $Key ( sort keys %{$HeaderHashRef} ){
+            printf " %s = %3d\n",$Key,$HeaderHashRef->{$Key} ;
+        }
+    
+        foreach my $TemplateRef ( @{$TemplateArrayRef} ){
+            print "\n- Template Information -\n" ;
+     
+            foreach my $TempKey ( sort keys %{$TemplateRef} ){
+                if( $TempKey eq "Template" ){
+                    printf "  %s = \n",$TempKey ;
+                    foreach my $Ref ( @{$TemplateRef->{Template}}  ){
+                        foreach my $Key ( keys %{$Ref} ){
+                            printf "   %s=%s", $Key, $Ref->{$Key} ;
+                        }
+                        print "\n" ;
                     }
-                   # print "\n" ;
+                }else{
+                    printf "  %s = %s\n", $TempKey, $TemplateRef->{$TempKey} ;
                 }
-            }else{
-                #printf "  %s = %s\n", $TempKey, $TemplateRef->{$TempKey} ;
             }
         }
     }
@@ -139,7 +151,6 @@ while ($sock->recv($packet,1548)) {
             $end_time += $HeaderHashRef->{"UnixSecs"} * 1000;
        
             #$data = "FLOW $start_time $end_time ";
-            #$data = $data . hex(unpack("H*",$FlowRef->{1})) . "\t";                       # Size of Flow
             $data = hex(unpack("H*",$FlowRef->{1})) . "\t";                                # Size of Flow
             $data = $data . $numberOfPackets . "\t";                                       # Number of packets
             $data = $data . join('.', unpack('CCCC',$FlowRef->{8})) . "\t";                # Source Address
@@ -194,7 +205,7 @@ Olivier Bilodeau <obilodeau@inverse.ca>
 
 =head1 COPYRIGHT
 
-Copyright (C) 2009 Inverse inc.
+Copyright (C) 2009,2010 Inverse inc.
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License

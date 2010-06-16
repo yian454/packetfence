@@ -38,6 +38,8 @@ my $logger = Log::Log4perl->get_logger($binary_name);
 Log::Log4perl::MDC->put('proc', $binary_name);
 Log::Log4perl::MDC->put('tid',  0);
 
+
+# initialization
 POSIX::sigaction(
     &POSIX::SIGHUP,
     POSIX::SigAction->new('normal_sighandler', POSIX::SigSet->new(), &POSIX::SA_NODEFER)
@@ -69,29 +71,57 @@ daemonize() if ($daemonize);
 
 $logger->info("initialized");
 
-my $packet = undef;
 my $TemplateArrayRef = undef;
 my $templateReceivedFlag = 0;
-#TODO: honor the -i parameter from CLI, wait do we really need that?
-#I think its easier to listen to everything (and filter with firewall)
-#or maybe with an IP param (that we can grab from pf.conf)
-my $sock = IO::Socket::INET->new(LocalPort => $port, Proto => 'udp')
-  or $logger->logdie("Can't bind to UDP port $port. Netflow analysis stopped. OS error: $!");
-
-$logger->info("Listening on UDP $port. Netflow/IPFIX analysis started.");
-
 my $info_string = "Size\t#pkts\tsrcip\t\tsrcport\tdstip\t\tdstport\tsrcmac\t\t\tdstmac\t\t\tnexthop";
 
 # main loop
-while ($sock->recv($packet,1548)) {
+listen_flow($port);
 
-    $logger->debug("received flow from: ". $sock->peerhost());
+=head1 SUBROUTINES
+
+=over
+
+=item listen_flow 
+
+open the socket and listens to the flow
+
+=cut
+sub listen_flow {
+    my ($port) = @_;
+    my $logger = Log::Log4perl->get_logger("$binary_name");
+
+    my $packet = undef;
+
+    #TODO: honor the -i parameter from CLI, wait do we really need that?
+    #I think its easier to listen to everything (and filter with firewall)
+    #or maybe with an IP param (that we can grab from pf.conf)
+    my $sock = IO::Socket::INET->new(LocalPort => $port, Proto => 'udp')
+        or $logger->logdie("Can't bind to UDP port $port. Netflow analysis stopped. OS error: $!");
+    
+    $logger->info("Listening on UDP $port. Netflow/IPFIX analysis started.");
+    
+    while ($sock->recv($packet,1548)) {
+
+        $logger->debug("received flow from: ". $sock->peerhost());
+        parse_flow(\$packet);
+    }
+}
+
+=item parse_flow 
+
+parses a flow packet
+
+=cut
+sub parse_flow {
+    my ($packet) = @_; 
+    my $logger = Log::Log4perl->get_logger("$binary_name");
 
     # forces re-init of variables
     my ($HeaderHashRef,$FlowArrayRef,$ErrorsArrayRef) = ();
 
     ($HeaderHashRef, $TemplateArrayRef, $FlowArrayRef, $ErrorsArrayRef)
-         = Net::Flow::decode(\$packet, $TemplateArrayRef);
+         = Net::Flow::decode($packet, $TemplateArrayRef);
 
     # TODO: ERROR-HANDLING:
     # grep{ print "$_\n" }@{$ErrorsArrayRef} if( @{$ErrorsArrayRef} ) ;
@@ -138,7 +168,6 @@ while ($sock->recv($packet,1548)) {
     }
 }
 
-
 END {
     deletepid();
 
@@ -170,6 +199,7 @@ sub normal_sighandler {
     $logger->logdie( "caught SIG" . $_[0] . " - terminating" );
 }
 
+=back
 
 =head1 AUTHOR
 

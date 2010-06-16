@@ -4,3 +4,5 @@ To implement before considering feature done:
 - Basic tests
 - Performance testing (based on expected flow traffic)
 
+Testing required:
+- Multiple flow sources, what will happen with the templates (incl. learned ones)?

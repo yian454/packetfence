@@ -8,7 +8,10 @@ pfnetflow - listen to netflow/IPFIX traffic and create PF violations
 
 pfnetflow -i <interface> -p <port> [options]
 
+ Otherwise specified port 4739 is assumed.
+
  Options:
+   -c     Alternate flow rules file (defaults to conf/netflow.conf)
    -d     Daemonize
    -h     Help
 
@@ -61,22 +64,27 @@ POSIX::sigaction(
 
 my @ORIG_ARGV = @ARGV;
 my %args;
-getopts( 'dhvi:p:', \%args );
+getopts( 'dhvi:p:c:', \%args );
 
 my $daemonize = $args{d};
 my $verbose = $args{v};
 my $interface = $args{i};
-my $port = $args{p};
+my $port = $args{p} || 4739; # IPFIX standard port
+my $configfile = $args{c} || "$conf_dir/netflow.conf";
 
-pod2usage( -verbose => 1 ) if ( $args{h} || !($args{p} && $args{i}) );
+# TODO might remove dependency on interface flag if we can listen UDP on all
+pod2usage( -verbose => 1 ) if ( $args{h} || !($port && $args{i}) );
 
 daemonize() if ($daemonize);
 
 $logger->info("initialized");
 
+my $flow = new pf::flow::custom();
+load_conf();
 # main loop
 listen_flow($port);
 
+exit(0);
 =head1 SUBROUTINES
 
 =over
@@ -100,7 +108,6 @@ sub listen_flow {
     
     $logger->info("Listening on UDP $port. Netflow/IPFIX analysis started.");
     
-    my $flow = new pf::flow::custom();
     while ($sock->recv($packet,1548)) {
 
         $logger->debug("received flow from: ". $sock->peerhost());
@@ -114,7 +121,9 @@ END {
     # TODO free resources
 }
 
-exit(0);
+sub load_conf {
+    $flow->read_netflow_conf($configfile);
+}
 
 sub daemonize {
     chdir '/' or $logger->logdie("Can't chdir to /: $!");

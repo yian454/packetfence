@@ -21,6 +21,7 @@ use Log::Log4perl;
 #TODO not sure about these yet
 #use pf::config;
 #use pf::util;
+use pf::node;
 
 our $TemplateArrayRef = undef;
 our $templateReceivedFlag = 0;
@@ -94,12 +95,36 @@ sub parseFlow {
     # TODO: so far flows are always oriented the right way (there's a task in TODO to validate that)
     # so src MAC is what we are looking to monitor
 
-    # provide an external hook to discard flows here
-    # for ex: if src or dst mac is 802.1X, it's ok
+    # TODO naive implementation, caching will need to be involved for any of this to scale
+    # for caching, Cache would be interesting (packaged as perl-Cache)
+    my $srcMac = $this->getSourceMAC($flowRef);
+    my $node_info = node_view($srcMac);
+    if (defined($node_info) && ref($node_info) eq 'HASH') {
+        $logger->trace("this node is: ".$node_info->{'status'});
 
-    # identify node category
+        # provide an external hook to discard flows here
+        # for ex: if src or dst mac is 802.1X, it's ok
+        if ($this->shouldDiscardFlow($flowRef, $node_info)) {
+            return;
+        }
 
-    # match all flow rules based on category and apply them
+        # identify node category
+
+        # match all flow rules based on category and apply them
+    } else {
+        # TODO: what should be done about it?
+        $logger->warn("Flow about a node unknown to PacketFence! MAC: $srcMac");
+    }
+}
+
+=item shouldDiscardFlow
+
+If it returns 1, the flow will be discarded and not processed. Meant to be overridden.
+
+=cut
+sub shouldDiscardFlow {
+    my ($this, $flowRef, $node_info) = @_;
+    return 0;
 }
 
 # information about what is in flows in RFC3954 (see references)
@@ -159,6 +184,31 @@ sub flowToString {
 # enddate: int($flowRef->{21}/1000) + $HeaderHashRef->{"UnixSecs"} #warn: int is not rounding precisely
 # my $start_time = hex(unpack("H*", $flowRef->{22}));
 # my $end_time = hex(unpack("H*", $flowRef->{21}));
+
+=item read_netflow_conf
+
+Reads all the rules
+
+=cut
+sub read_netflow_conf {
+    my ($this, $configfile) = @_;
+    my $logger = Log::Log4perl::get_logger('pf::flow');
+
+    my %netflow_conf;
+    tie %netflow_conf, 'Config::IniFiles', (-file => $configfile);
+
+    my @errors = @Config::IniFiles::errors;
+    if (@errors) {
+        $logger->error("Error reading netflow.conf: " . join( "\n", @errors ) . "\n");
+        return 0;
+    }
+
+    # TODO perform validation (in an external sub?)
+    # TODO validation: policy whitelist and policy blacklist cannot be mixed under same node category
+
+    return 1;
+}       
+
 
 =back
 

@@ -26,8 +26,11 @@ use IO::Socket::INET;
 
 use constant INSTALL_DIR => '/usr/local/pf';
 
-use lib INSTALL_DIR . "/lib";
-use pf::db;
+#FIXME temporary
+#use lib INSTALL_DIR . "lib";
+use lib "lib";
+
+use pf::flow::custom;
 use pf::config;
 use pf::util;
 
@@ -71,10 +74,6 @@ daemonize() if ($daemonize);
 
 $logger->info("initialized");
 
-my $TemplateArrayRef = undef;
-my $templateReceivedFlag = 0;
-my $info_string = "Size\t#pkts\tsrcip\t\tsrcport\tdstip\t\tdstport\tsrcmac\t\t\tdstmac\t\t\tnexthop";
-
 # main loop
 listen_flow($port);
 
@@ -101,91 +100,11 @@ sub listen_flow {
     
     $logger->info("Listening on UDP $port. Netflow/IPFIX analysis started.");
     
+    my $flow = new pf::flow::custom();
     while ($sock->recv($packet,1548)) {
 
         $logger->debug("received flow from: ". $sock->peerhost());
-        decompose_flows(\$packet);
-    }
-}
-
-=item decompose_flows
-
-parses a flow packet
-
-=cut
-sub decompose_flows {
-    my ($packet) = @_; 
-    my $logger = Log::Log4perl->get_logger("$binary_name");
-
-    # forces re-init of variables
-    my ($HeaderHashRef,$FlowArrayRef,$ErrorsArrayRef) = ();
-
-    ($HeaderHashRef, $TemplateArrayRef, $FlowArrayRef, $ErrorsArrayRef)
-         = Net::Flow::decode($packet, $TemplateArrayRef);
-
-    # TODO: ERROR-HANDLING of Net::Flow
-    if (@{$ErrorsArrayRef}) {
-        foreach my $error (@{$ErrorsArrayRef}) {
-            if ($error =~ /^WARNING/) {
-                $logger->trace("got a warning from Net::Flow::decode. Usually normal: $error.");
-            } else {
-                $logger->warn("Net::Flow::decode error: $error.");
-            }
-        }
-    }
-
-    if (!$templateReceivedFlag && @{$TemplateArrayRef}) {
-        $logger->info("Received the template. Flows are now interpreted.");
-        $templateReceivedFlag = 1;
-    }
-
-    if (!@{$TemplateArrayRef}) {
-        $logger->debug("No template received yet. Can't parse the netflow/IPFIX until a template has been received");
-    } 
-
-    if (@{$FlowArrayRef}) {
-        $logger->trace($info_string);
-    }
-
-    foreach my $FlowRef ( @{$FlowArrayRef} ){
-
-        # date is epoch: int($FlowRef->{22}/1000) + $HeaderHashRef->{"UnixSecs"} #warning: int is not rounding precisely
-        my $start_time = hex(unpack("H*", $FlowRef->{22}));
-        my $end_time = hex(unpack("H*", $FlowRef->{21}));
-        my $numberOfPackets = hex(unpack("H*", $FlowRef->{10}));
-     
-        my $nexthop = join('.', unpack('CCCC', $FlowRef->{15}));
-     
-        if($numberOfPackets ne "0") {
-            my $data;
-            $start_time += $HeaderHashRef->{"UnixSecs"} * 1000;
-            $end_time += $HeaderHashRef->{"UnixSecs"} * 1000;
-       
-            #$data = "FLOW $start_time $end_time ";
-            $data = hex(unpack("H*",$FlowRef->{1})) . "\t";                                # Size of Flow
-            $data = $data . $numberOfPackets . "\t";                                       # Number of packets
-            $data = $data . join('.', unpack('CCCC',$FlowRef->{8})) . "\t";                # Source Address
-            $data = $data . hex(unpack("H*",$FlowRef->{7})) . "\t";                        # Source Port
-            $data = $data . join('.', unpack('CCCC',$FlowRef->{12})) . "\t";               # Destination Address
-            $data = $data . hex(unpack("H*",$FlowRef->{11})) . "\t";                       # Destination Port
-            $data = $data . join(':', unpack('H2 H2 H2 H2 H2 H2', $FlowRef->{56})) . "\t"; # Source MAC Address
-            $data = $data . join(':', unpack('H2 H2 H2 H2 H2 H2', $FlowRef->{57})) . "\t"; # Destination MAC Address
-            $data = $data . join('.', unpack('CCCC',$FlowRef->{15}));                      # Next Hop Address
-       
-            $logger->trace($data);
-
-            # TODO: so far flows are always oriented the right way (there's a task in TODO to validate that)
-            # so src MAC is what we are looking to monitor
-
-            # provide an external hook to discard flows here
-            # for ex: if src or dst mac is 802.1X, it's ok
-
-            # identify correct source MAC (direction of the flow)
-
-            # identify node category
-
-            # match all flow rules based on category and apply them
-        }
+        $flow->processFlowPacket(\$packet);
     }
 }
 

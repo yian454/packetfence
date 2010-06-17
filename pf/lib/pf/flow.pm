@@ -24,7 +24,6 @@ use Log::Log4perl;
 
 our $TemplateArrayRef = undef;
 our $templateReceivedFlag = 0;
-our $info_string = "Size\t#pkts\tsrcip\t\tsrcport\tdstip\t\tdstport\tsrcmac\t\t\tdstmac\t\t\tnexthop";
 
 =head1 SUBROUTINES
 
@@ -75,54 +74,32 @@ sub processFlowPacket {
         $logger->debug("No template received yet. Can't parse the netflow/IPFIX until a template has been received");
     } 
 
-    if (@{$FlowArrayRef}) {
-        $logger->trace($info_string);
+    foreach my $flowRef (@{$FlowArrayRef}) {
+        $this->parseFlow($flowRef);
     }
+}
 
-    foreach my $FlowRef ( @{$FlowArrayRef} ){
 
-        # all time is epoch
-        # startdate: int($FlowRef->{22}/1000) + $HeaderHashRef->{"UnixSecs"} #warn: int is not rounding precisely
-        # enddate: int($FlowRef->{21}/1000) + $HeaderHashRef->{"UnixSecs"} #warn: int is not rounding precisely
-        my $start_time = hex(unpack("H*", $FlowRef->{22}));
-        my $end_time = hex(unpack("H*", $FlowRef->{21}));
-        my $numberOfPackets = hex(unpack("H*", $FlowRef->{10}));
-     
-        my $nexthop = join('.', unpack('CCCC', $FlowRef->{15}));
-     
-        if($numberOfPackets ne "0") {
-            my $data;
-            $start_time += $HeaderHashRef->{"UnixSecs"} * 1000;
-            $end_time += $HeaderHashRef->{"UnixSecs"} * 1000;
-       
-            #$data = "FLOW $start_time $end_time ";
-            $data = hex(unpack("H*",$FlowRef->{1})) . "\t";                                # Size of Flow
-            $data = $data . $numberOfPackets . "\t";                                       # Number of packets
-            $data = $data . $this->getSourceIP($FlowRef) . "\t";                           # Source Address
-            $data = $data . hex(unpack("H*",$FlowRef->{7})) . "\t";                        # Source Port
-            $data = $data . $this->getDestIP($FlowRef) . "\t";                             # Destination Address
-            $data = $data . hex(unpack("H*",$FlowRef->{11})) . "\t";                       # Destination Port
-            $data = $data . join(':', unpack('H2 H2 H2 H2 H2 H2', $FlowRef->{56})) . "\t"; # Source MAC Address
-            $data = $data . join(':', unpack('H2 H2 H2 H2 H2 H2', $FlowRef->{57})) . "\t"; # Destination MAC Address
-            $data = $data . join('.', unpack('CCCC',$FlowRef->{15}));                      # Next Hop Address
-       
-            $logger->trace($data);
+=item parseFlow
 
-            # TODO: so far flows are always oriented the right way (there's a task in TODO to validate that)
-            # so src MAC is what we are looking to monitor
+Analyzes one flow
 
-            # provide an external hook to discard flows here
-            # for ex: if src or dst mac is 802.1X, it's ok
+=cut
+sub parseFlow {
+    my ($this, $flowRef) = @_;
+    my $logger = Log::Log4perl->get_logger("pf::flow");
 
-            # identify correct source MAC (direction of the flow)
+    $logger->trace($this->flowToString($flowRef));
+        
+    # TODO: so far flows are always oriented the right way (there's a task in TODO to validate that)
+    # so src MAC is what we are looking to monitor
 
-            # identify node category
+    # provide an external hook to discard flows here
+    # for ex: if src or dst mac is 802.1X, it's ok
 
-            # match all flow rules based on category and apply them
-        } else {
-            $logger->error("number of packets is ZEROOO!! <------------------------------------");
-        }
-    }
+    # identify node category
+
+    # match all flow rules based on category and apply them
 }
 
 # information about what is in flows in RFC3954 (see references)
@@ -156,11 +133,32 @@ sub getDestMAC {
     return(join(':', unpack('H2 H2 H2 H2 H2 H2', $flowRef->{57})));
 }
 
+=item flowToString
+
+Convenient little wrapper that will output the flow reference in the form: src ip:port (mac) <-> dst ip:port (mac)
+
+=cut
+sub flowToString {
+    my ($this, $flowRef) = @_;
+
+    return(
+        $this->getSourceIP($flowRef) . ":" . $this->getSourcePort($flowRef)
+        . " (" . $this->getSourceMAC($flowRef) . ")"
+        . " <-> "
+        . $this->getDestIP($flowRef) .":". $this->getDestPort($flowRef)
+        . " (". $this->getDestMAC($flowRef) . ")"
+    );
+}
 
 # I am not using these so far
-# Number Of Packets: hex(unpack("H*", $FlowRef->{10}));
-# Size of flow: hex(unpack("H*",$FlowRef->{1}));
-# Next Hop Address: join('.', unpack('CCCC',$FlowRef->{15}));
+# Size of flow: hex(unpack("H*",$flowRef->{1}));
+# Next Hop Address: join('.', unpack('CCCC',$flowRef->{15}));
+
+# Time-related (all time is epoch or sysUpTime related, not so sure)
+# startdate: int($flowRef->{22}/1000) + $HeaderHashRef->{"UnixSecs"} #warn: int is not rounding precisely
+# enddate: int($flowRef->{21}/1000) + $HeaderHashRef->{"UnixSecs"} #warn: int is not rounding precisely
+# my $start_time = hex(unpack("H*", $flowRef->{22}));
+# my $end_time = hex(unpack("H*", $flowRef->{21}));
 
 =back
 

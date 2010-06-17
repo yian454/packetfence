@@ -80,8 +80,6 @@ my $sock = IO::Socket::INET->new(LocalPort => $port, Proto => 'udp')
 
 $logger->info("Listening on UDP $port. Netflow analysis started.");
 
-print "$script: bozo test\n";
-
 while ($sock->recv($packet,1548)) {
 
     print "------------------------------------------------------------------------\n"; 

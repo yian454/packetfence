@@ -104,16 +104,16 @@ sub listen_flow {
     while ($sock->recv($packet,1548)) {
 
         $logger->debug("received flow from: ". $sock->peerhost());
-        parse_flow(\$packet);
+        decompose_flows(\$packet);
     }
 }
 
-=item parse_flow 
+=item decompose_flows
 
 parses a flow packet
 
 =cut
-sub parse_flow {
+sub decompose_flows {
     my ($packet) = @_; 
     my $logger = Log::Log4perl->get_logger("$binary_name");
 
@@ -146,6 +146,7 @@ sub parse_flow {
     if (@{$FlowArrayRef}) {
         $logger->trace($info_string);
     }
+
     foreach my $FlowRef ( @{$FlowArrayRef} ){
 
         # date is epoch: int($FlowRef->{22}/1000) + $HeaderHashRef->{"UnixSecs"} #warning: int is not rounding precisely
@@ -155,7 +156,7 @@ sub parse_flow {
      
         my $nexthop = join('.', unpack('CCCC', $FlowRef->{15}));
      
-        if($numberOfPackets ne "0"){
+        if($numberOfPackets ne "0") {
             my $data;
             $start_time += $HeaderHashRef->{"UnixSecs"} * 1000;
             $end_time += $HeaderHashRef->{"UnixSecs"} * 1000;
@@ -172,6 +173,18 @@ sub parse_flow {
             $data = $data . join('.', unpack('CCCC',$FlowRef->{15}));                      # Next Hop Address
        
             $logger->trace($data);
+
+            # TODO: so far flows are always oriented the right way (there's a task in TODO to validate that)
+            # so src MAC is what we are looking to monitor
+
+            # provide an external hook to discard flows here
+            # for ex: if src or dst mac is 802.1X, it's ok
+
+            # identify correct source MAC (direction of the flow)
+
+            # identify node category
+
+            # match all flow rules based on category and apply them
         }
     }
 }

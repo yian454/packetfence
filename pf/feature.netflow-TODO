@@ -6,3 +6,9 @@ To implement before considering feature done:
 
 Testing required:
 - Multiple flow sources, what will happen with the templates (incl. learned ones)?
+- So far, flows gathered by the router in the lab are all LAN to WAN which is very convenient. 
+  However, I suspect that they could be in the other direction too. It should be explicitly 
+  tested. Do we need another ingress statement on the outgoing interface or not?
+  
+Future
+- Package a seperate netflow/ipfix processor (the bin/ and related libs)

@@ -91,6 +91,7 @@ exit(0);
 open the socket and listens to the flow
 
 =cut
+# TODO improve performance by following another approach: http://perldoc.perl.org/perlipc.html#UDP%3a-Message-Passing
 sub listen_flow {
     my ($port) = @_;
     my $logger = Log::Log4perl->get_logger("$binary_name");

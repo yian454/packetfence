@@ -12,8 +12,7 @@ Log::Log4perl::MDC->put( 'tid',  0 );
 
 use Test::More tests => 21;
 
-# FIXME change this!
-use lib '../lib';
+use lib '/usr/local/pf/lib';
 use pf::config;
 
 BEGIN { 

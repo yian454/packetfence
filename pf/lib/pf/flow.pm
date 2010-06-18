@@ -113,19 +113,39 @@ sub parseFlow {
         my $netflow_conf = $this->getNetflowConf();
         my @rules = $this->getRulesIdForCategory($netflow_conf, $node_info->{'category'});
 
-        # TODO so far, only whitelist processing
-
-
+        if (@rules) {
+            # TODO so far, only whitelist processing
+            # I should actually branch into whitelist and blacklist processing at this point
+            my $result = $this->matchFlowAgainstRules($flowRef, $netflow_conf, @rules);
+            if ($result) {
+                $logger->debug("flow matched allowed rule id: $result.");
+            } else {
+                $logger->warn("flow didn't match any whitelist rule! Reporting as a violation");
+            }
+        }
     } else {
         # TODO: what should be done about it?
         $logger->warn("Flow about a node unknown to PacketFence! MAC: $srcMac");
     }
 }
 
-sub matchFlowAgainstRule {
+sub matchFlowAgainstRules {
     my ($this, $flowRef, $netflow_conf, @rules) = @_;
 
-    #ipFilter
+    # assume it doesn't match
+    my $matches = 0;
+    foreach my $rule_id (@rules) {
+
+        my $srcip_match = $this->ipFilter($this->getSourceIP($flowRef), $netflow_conf->{$rule_id}->{'src_ip'});
+        my $srcport_match = $this->portFilter($this->getSourcePort($flowRef), $netflow_conf->{$rule_id}->{'src_port'});
+        my $dstip_match = $this->ipFilter($this->getDestIP($flowRef), $netflow_conf->{$rule_id}->{'dst_ip'});
+        my $dstport_match = $this->portFilter($this->getDestPort($flowRef), $netflow_conf->{$rule_id}->{'dst_port'});
+
+        if ($srcip_match && $srcport_match && $dstip_match && $dstport_match) {
+            $matches = $rule_id;
+        }
+    }
+    return $matches;
 }
 
 =sub ipFilter

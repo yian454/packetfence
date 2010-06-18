@@ -22,6 +22,7 @@ use Log::Log4perl;
 #use pf::config;
 #use pf::util;
 use pf::node;
+use pf::violation;
 
 # Be careful with these since it won't be inherited by subclasses
 our $TemplateArrayRef = undef;
@@ -110,17 +111,23 @@ sub parseFlow {
 
         # match all flow rules based on category and apply them
         # TODO cache node's category or cache rules applicable to the node
+        my $category = $node_info->{'category'};
         my $netflow_conf = $this->getNetflowConf();
-        my @rules = $this->getRulesIdForCategory($netflow_conf, $node_info->{'category'});
+        my @rules = $this->getRulesIdForCategory($netflow_conf, $category);
 
         if (@rules) {
             # TODO so far, only whitelist processing
             # I should actually branch into whitelist and blacklist processing at this point
             my $result = $this->matchFlowAgainstRules($flowRef, $netflow_conf, @rules);
             if ($result) {
-                $logger->debug("flow matched allowed rule id: $result.");
+                $logger->debug("flow matched allowed rule id: \"$result\".");
             } else {
-                $logger->warn("flow didn't match any whitelist rule! Reporting as a violation");
+                $logger->info("flow didn't match any whitelist rule! Reporting flow as a violation. "
+                    . "trigger id: " . $netflow_conf->{$category}->{'id'} . " "
+                    . "description: " . $netflow_conf->{$category}->{'description'} . " "
+                    . "flow details: " . $this->flowToString($flowRef)
+                );
+                violation_trigger($srcMac, $netflow_conf->{$category}->{'id'}, "flow");
             }
         }
     } else {
@@ -158,7 +165,7 @@ sub ipFilter {
 
     # TODO regexp pre-compilation could be useful: http://www.stonehenge.com/merlyn/UnixReview/col28.html
     # \Q..\E is to quote regexp characters in $filter so that ie . won't match
-    if ($ip =~ /^\Q$filter\E$/x) {
+    if ($ip =~ /^\Q$filter\E$/) {
         # full IP match
         return 1;
     } elsif ($filter =~ /^\*$/) {
@@ -218,6 +225,12 @@ If it returns 1, the flow will be discarded and not processed. Meant to be overr
 =cut
 sub shouldDiscardFlow {
     my ($this, $flowRef, $node_info) = @_;
+
+    # not useful to process node without a category
+    if (!defined($node_info->{'category'})) {
+        return 1;
+    }
+
     return 0;
 }
 
@@ -300,8 +313,16 @@ sub read_netflow_conf {
     # TODO trim arguments
     # TODO perform validation (in an external sub?)
     # TODO validation: policy whitelist and policy blacklist cannot be mixed under same node category
-    # TODO validation: node_category must be present
+    # TODO validation: a section per category with id=, then section with [category XXXX]
+    # TODO validation: categories must exist (and be case-sensitive about it)
     # TODO validation: in IPs allow * and any variation of x.x.*.x but not x.x.* (missing group) or x.*x.x.x (subgroup)
+
+    # TODO performance: precompute the hash in the form once measurements can be made
+    # Category => id = 
+    #          => desc = 
+    #          => policy = 
+    #          => 1001 => src_ip=.., src_port=.., etc.
+    #          => 1002 => src_ip=.., src_port=.., etc.
 
     return %netflow_conf;
 }
@@ -322,7 +343,7 @@ sub getRulesIdForCategory {
  
     my @matching_rules;
     foreach my $rule_id (keys %{$netflow_conf}) {
-        if (lc($netflow_conf->{$rule_id}->{node_category}) eq lc($category)) {
+        if ($rule_id =~ /^$category (\d+)$/i) {
             push(@matching_rules, $rule_id);
         }
     }

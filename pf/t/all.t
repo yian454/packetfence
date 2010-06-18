@@ -29,5 +29,6 @@ runtests( qw(
               radius.t
               report.t
               node.t
+              flow.t
             )
 );

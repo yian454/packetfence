@@ -109,14 +109,86 @@ sub parseFlow {
         }
 
         # match all flow rules based on category and apply them
+        # TODO cache node's category or cache rules applicable to the node
         my $netflow_conf = $this->getNetflowConf();
         my @rules = $this->getRulesIdForCategory($netflow_conf, $node_info->{'category'});
-        
+
+        # TODO so far, only whitelist processing
+
 
     } else {
         # TODO: what should be done about it?
         $logger->warn("Flow about a node unknown to PacketFence! MAC: $srcMac");
     }
+}
+
+sub matchFlowAgainstRule {
+    my ($this, $flowRef, $netflow_conf, @rules) = @_;
+
+    #ipFilter
+}
+
+=sub ipFilter
+
+Tells if IP is listed in filter. Supported expressions are * at the group and at the single digit level.
+
+=cut
+sub ipFilter {
+    my ($this, $ip, $filter) = @_;
+
+    # TODO regexp pre-compilation could be useful: http://www.stonehenge.com/merlyn/UnixReview/col28.html
+    # \Q..\E is to quote regexp characters in $filter so that ie . won't match
+    if ($ip =~ /^\Q$filter\E$/x) {
+        # full IP match
+        return 1;
+    } elsif ($filter =~ /^\*$/) {
+        # full wildcard match
+        return 1;
+    } elsif ($filter =~ /\*/) {
+        # replace first group wildcard (*.x.x.x) in the filter, we change wildcard to match 1-999
+        $filter =~ s'^\*\.'\d{1,3}.';
+        # replace last group wildcard (x.x.x.*) in the filter, we change wildcard to match 1-999
+        $filter =~ s'\.\*$'.\d{1,3}';
+        # there's a group wildcard (x.*.x.x) in the filter, we change wildcard to match 1-999
+        $filter =~ s'\.\*\.'.\d{1,3}.'g;
+        # there's a single digit wildcard (x.*x.x.x) in the filter, we change wildcard to match single digit
+        $filter =~ s'\*'\d'g;
+        # quote the .
+        $filter =~ s'\.'\.'g;
+        if ($ip =~ /^$filter$/) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+=sub portFilter
+
+Tells if port is listed in filter. Supported expressions are , * and -.
+
+=cut
+sub portFilter {
+    my ($this, $port, $filter) = @_;
+
+    # TODO regexp pre-compilation could be useful: http://www.stonehenge.com/merlyn/UnixReview/col28.html
+    # \Q..\E is to quote regexp characters in $filter so that ie . won't match
+    if ($port =~ /^\Q$filter\E$/x) {
+        # full port match
+        return 1;
+    } elsif ($filter =~ /^\*$/) {
+        # full wildcard match
+        return 1;
+    } elsif ($filter =~ /\b$port\b/) {
+        # match port directly into a longer expression but no expansion required yet (no dash)
+        # ex: 100 in 22,23,25,100,135 but not in 10,1000,1443 or 1100,1443
+        return 1;
+    } elsif ($filter =~ /\b(\d+)-(\d+)\b/) {
+        # matches xxx-xxx with correct boundaries
+        if (($port >= $1) && ($port <= $2)) {
+            return 1;
+        }
+    }
+    return 0;
 }
 
 =item shouldDiscardFlow
@@ -209,6 +281,7 @@ sub read_netflow_conf {
     # TODO perform validation (in an external sub?)
     # TODO validation: policy whitelist and policy blacklist cannot be mixed under same node category
     # TODO validation: node_category must be present
+    # TODO validation: in IPs allow * and any variation of x.x.*.x but not x.x.* (missing group) or x.*x.x.x (subgroup)
 
     return %netflow_conf;
 }

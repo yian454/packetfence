@@ -25,8 +25,22 @@ my $flow = new pf::flow::custom();
 isa_ok($flow, 'pf::flow');
 
 # subs
-# TODO fill in subs
 can_ok($flow, qw(
+    new
+    processFlowPacket
+    parseFlow
+    matchFlowAgainstRules
+    shouldDiscardFlow
+    getSourceIP
+    getDestIP
+    getSourcePort
+    getDestPort
+    getSourceMAC
+    getDestMAC
+    flowToString
+    read_netflow_conf
+    getNetflowConf
+    getRulesIdForCategory
     ipFilter
     portFilter
 ));

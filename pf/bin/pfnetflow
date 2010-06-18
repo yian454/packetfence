@@ -44,7 +44,6 @@ my $logger = Log::Log4perl->get_logger($binary_name);
 Log::Log4perl::MDC->put('proc', $binary_name);
 Log::Log4perl::MDC->put('tid',  0);
 
-
 # initialization
 POSIX::sigaction(
     &POSIX::SIGHUP,
@@ -61,7 +60,7 @@ POSIX::sigaction(
     POSIX::SigAction->new('normal_sighandler', POSIX::SigSet->new(), &POSIX::SA_NODEFER)
 ) or $logger->logdie("$binary_name: could not set SIGINT handler: $!");
 
-
+# CLI arguments handling
 my @ORIG_ARGV = @ARGV;
 my %args;
 getopts( 'dhvi:p:c:', \%args );
@@ -74,13 +73,13 @@ my $configfile = $args{c} || "$conf_dir/netflow.conf";
 
 # TODO might remove dependency on interface flag if we can listen UDP on all
 pod2usage( -verbose => 1 ) if ( $args{h} || !($port && $args{i}) );
-
 daemonize() if ($daemonize);
 
 $logger->info("initialized");
 
 my $flow = new pf::flow::custom();
-load_conf();
+our %netflow_conf = $flow->read_netflow_conf($configfile)
+    or $logger->logdie("Problem reading $configfile. See logs for details.");
 # main loop
 listen_flow($port);
 
@@ -119,10 +118,6 @@ END {
     deletepid();
 
     # TODO free resources
-}
-
-sub load_conf {
-    $flow->read_netflow_conf($configfile);
 }
 
 sub daemonize {

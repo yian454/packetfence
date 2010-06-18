@@ -23,6 +23,7 @@ use Log::Log4perl;
 #use pf::util;
 use pf::node;
 
+# Be careful with these since it won't be inherited by subclasses
 our $TemplateArrayRef = undef;
 our $templateReceivedFlag = 0;
 
@@ -100,7 +101,6 @@ sub parseFlow {
     my $srcMac = $this->getSourceMAC($flowRef);
     my $node_info = node_view($srcMac);
     if (defined($node_info) && ref($node_info) eq 'HASH') {
-        $logger->trace("this node is: ".$node_info->{'status'});
 
         # provide an external hook to discard flows here
         # for ex: if src or dst mac is 802.1X, it's ok
@@ -108,9 +108,11 @@ sub parseFlow {
             return;
         }
 
-        # identify node category
-
         # match all flow rules based on category and apply them
+        my $netflow_conf = $this->getNetflowConf();
+        my @rules = $this->getRulesIdForCategory($netflow_conf, $node_info->{'category'});
+        
+
     } else {
         # TODO: what should be done about it?
         $logger->warn("Flow about a node unknown to PacketFence! MAC: $srcMac");
@@ -199,16 +201,41 @@ sub read_netflow_conf {
 
     my @errors = @Config::IniFiles::errors;
     if (@errors) {
-        $logger->error("Error reading netflow.conf: " . join( "\n", @errors ) . "\n");
-        return 0;
+        $logger->error("Error reading $configfile: " . join( "\n", @errors ) . "\n");
+        return;
     }
 
+    # TODO trim arguments
     # TODO perform validation (in an external sub?)
     # TODO validation: policy whitelist and policy blacklist cannot be mixed under same node category
+    # TODO validation: node_category must be present
 
-    return 1;
-}       
+    return %netflow_conf;
+}
 
+=item getNetflowConf
+
+Simple accessor to encapsulate the way I currently store %netflow_conf
+
+=cut
+sub getNetflowConf {
+    # provided by pfnetflow's main package, returning a ref to avoid copy
+    return \%::netflow_conf;
+}
+
+sub getRulesIdForCategory {
+    my ($this, $netflow_conf, $category) = @_;
+    my $logger = Log::Log4perl->get_logger("pf::flow");
+ 
+    my @matching_rules;
+    foreach my $rule_id (keys %{$netflow_conf}) {
+        if (lc($netflow_conf->{$rule_id}->{node_category}) eq lc($category)) {
+            push(@matching_rules, $rule_id);
+        }
+    }
+    $logger->trace("matched ".scalar(@matching_rules)." rules");
+    return @matching_rules;
+}
 
 =back
 

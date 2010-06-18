@@ -3,6 +3,7 @@ To implement before considering feature done:
 - Package Net::Flow ourselves (its not in rpmforge) and add as a dep into spec
 - Basic tests
 - Performance testing (based on expected flow traffic)
+- Under load it should re-act as snort: do what it can up to maxing one core, discard to stay current, not queue
 
 Testing required:
 - Multiple flow sources, what will happen with the templates (incl. learned ones)?

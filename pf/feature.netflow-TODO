@@ -1,9 +1,15 @@
 To implement before considering feature done:
 
+- Integrate pfnetflowd as a pf service (start with pf, etc.)
+- Present pfnetflowd's running status under Web admin's Admin tab
 - Package Net::Flow ourselves (its not in rpmforge) and add as a dep into spec
 - Basic tests
 - Performance testing (based on expected flow traffic)
 - Under load it should re-act as snort: do what it can up to maxing one core, discard to stay current, not queue
+- Provide UI to edit conf/netflow.conf
+
+Before merge in trunk:
+- Re-assess all TODO, FIXME and XXX tasks
 
 Testing required:
 - Multiple flow sources, what will happen with the templates (incl. learned ones)?

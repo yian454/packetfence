@@ -115,6 +115,7 @@ Requires: perl-YAML
 Requires: php-jpgraph-packetfence = 2.3.4
 Requires: php-ldap
 Requires: perl(Try::Tiny)
+Requires: perl(Net::Flow)
 # Required for testing
 # TODO: I noticed that we provide perl-Test-MockDBI in our repo, maybe we made a poo poo with the deps
 BuildRequires: perl(Test::MockModule), perl(Test::MockDBI), perl(Test::Perl::Critic)
@@ -353,6 +354,7 @@ fi
 %attr(0755, pf, pf)     /usr/local/pf/bin/flip.pl
 %attr(6755, root, root) /usr/local/pf/bin/pfcmd
 %attr(0755, pf, pf)     /usr/local/pf/bin/pfcmd_vlan
+%attr(0755, pf, pf)     /usr/local/pf/bin/pfnetflowd
 %dir                    /usr/local/pf/cgi-bin
 %attr(0755, pf, pf)     /usr/local/pf/cgi-bin/pdp.cgi
 %attr(0755, pf, pf)     /usr/local/pf/cgi-bin/redir.cgi
@@ -395,6 +397,7 @@ fi
 %dir                    /usr/local/pf/conf/named
 %dir                    /usr/local/pf/conf/nessus
 %config(noreplace)      /usr/local/pf/conf/nessus/remotescan.nessus
+%config(noreplace)      /usr/local/pf/conf/netflow.conf
 %config(noreplace)      /usr/local/pf/conf/networks.conf
 %config                 /usr/local/pf/conf/oui.txt
 #%config(noreplace)      /usr/local/pf/conf/pf.conf
@@ -462,6 +465,8 @@ fi
                         /usr/local/pf/lib/pf/*.pm
 %dir                    /usr/local/pf/lib/pf/floatingdevice
 %config(noreplace)      /usr/local/pf/lib/pf/floatingdevice/custom.pm
+%dir                    /usr/local/pf/lib/pf/flow
+%config(noreplace)      /usr/local/pf/lib/pf/flow/custom.pm
 %dir                    /usr/local/pf/lib/pf/lookup
 %config(noreplace)      /usr/local/pf/lib/pf/lookup/node.pm
 %config(noreplace)      /usr/local/pf/lib/pf/lookup/person.pm
@@ -503,6 +508,10 @@ fi
 %dir                    /usr/local/pf/var
 
 %changelog
+* Mon Jun 21 2010 Olivier Bilodeau <obilodeau@inverse.ca>
+- Added files for new pfnetflowd daemon.
+- Added perl(Net::Flow) as a dependency. Required by pfnetflowd.
+
 * Tue May 18 2010 Olivier Bilodeau <obilodeau@inverse.ca>
 - Added missing file for Floating Network Device support: 
   floating_network_device.conf

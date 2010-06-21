@@ -7,6 +7,7 @@ To implement before considering feature done:
 - Performance testing (based on expected flow traffic)
 - Under load it should re-act as snort: do what it can up to maxing one core, discard to stay current, not queue
 - Provide UI to edit conf/netflow.conf
+- Finish the reload_sighandler portion so we can reload the config without a full stop / start cycle
 
 Before merge in trunk:
 - Re-assess all TODO, FIXME and XXX tasks

@@ -17,6 +17,7 @@ use warnings;
 use diagnostics;
 
 use Log::Log4perl;
+use Net::Flow qw(decode) ;
 
 #TODO not sure about these yet
 #use pf::config;

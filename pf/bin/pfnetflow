@@ -24,7 +24,6 @@ use File::Basename qw(basename);
 use POSIX qw(:signal_h);
 use Log::Log4perl;
 use Pod::Usage;
-use Net::Flow qw(decode) ;
 use IO::Socket::INET;
 
 use constant INSTALL_DIR => '/usr/local/pf';

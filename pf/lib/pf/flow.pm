@@ -133,19 +133,17 @@ sub parseFlow {
         my $netflow_conf = $this->getNetflowConf();
         my @rules = $this->getRulesIdForCategory($netflow_conf, $category);
 
-        if (@rules) {
-            # TODO so far, only whitelist processing
-            # I should actually branch into whitelist and blacklist processing at this point
-            my $matched_rule = $this->matchFlowAgainstRules($flowRef, $netflow_conf, @rules);
-            if ($matched_rule) {
-                return $this->onAuthorizedFlow($node_info, $POLICY::WHITELIST, $matched_rule, $flowRef);
-            } else {
-                my $trigger = { 
-                    'id' => $netflow_conf->{$category}->{'id'},
-                    'description' => $netflow_conf->{$category}->{'description'}
-                };
-                return $this->onUnauthorizedFlow($node_info, $POLICY::WHITELIST, undef, $trigger, $flowRef);
-            }
+        # TODO so far, only whitelist processing
+        # I should actually branch into whitelist and blacklist processing at this point
+        my $matched_rule = $this->matchFlowAgainstRules($flowRef, $netflow_conf, @rules);
+        if ($matched_rule) {
+            return $this->onAuthorizedFlow($node_info, $POLICY::WHITELIST, $matched_rule, $flowRef);
+        } else {
+            my $trigger = { 
+                'id' => $netflow_conf->{$category}->{'id'},
+                'description' => $netflow_conf->{$category}->{'description'}
+            };
+            return $this->onUnauthorizedFlow($node_info, $POLICY::WHITELIST, undef, $trigger, $flowRef);
         }
     } else {
         return $this->onUnknownSource($srcMac, $flowRef);

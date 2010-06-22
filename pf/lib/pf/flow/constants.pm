@@ -1,27 +1,43 @@
-package pf::flow::custom;
+package pf::flow::constants;
 
 =head1 NAME
 
-pf::flow - Module that deals with everything netflow/IPFIX related
+pf::flow::constants - Constants for pf::flow to be consumed by flow modules
 
-=head1 SYNOPSIS
+=head1 DESCRIPTION
 
-The pf::flow module contains the functions necessary for flow processing.
+This file is splitted by packages and refering to the constant require you to
+specify the package.
 
-This modules extends pf::flow. Override methods for which you want to customize
-behavior here.
+This unintuitive way of handling constants is done to circumvent Perl's inhability to inherit variables in class 
+hierarchies.
 
 =cut
 
 use strict;
 use warnings;
 use diagnostics;
-use Log::Log4perl;
 
-use base ('pf::flow');
+use Readonly;
 
-# load module's constants
-use pf::flow::constants;
+=head1 POLICY
+
+=cut
+package POLICY;
+
+=item Policy
+
+Flow rules can follow two different policies: blacklist or whitelist.
+In whitelist mode you specify what traffic patterns are allowed and a violation is triggered if a given flow doesn't 
+match any of the traffic patterns.
+In blacklist mode you specify what traffic patterns are not authorized and a violation is triggered if such a pattern 
+is recognized.
+
+=cut
+Readonly::Scalar our $WHITELIST => 'whitelist';
+Readonly::Scalar our $BLACKLIST => 'blacklist';
+
+=back
 
 =head1 AUTHOR
 

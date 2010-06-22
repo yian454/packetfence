@@ -25,6 +25,9 @@ use Net::Flow qw(decode) ;
 use pf::node;
 use pf::violation;
 
+# load module's constants
+use pf::flow::constants;
+
 # Be careful with these since it won't be inherited by subclasses
 # TODO: I should wrap them behind accessor methods
 our $TemplateArrayRef = undef;
@@ -114,35 +117,130 @@ sub parseFlow {
 
         # provide an external hook to discard flows here
         # for ex: if src or dst mac is 802.1X, it's ok
-        if ($this->shouldDiscardFlow($flowRef, $node_info)) {
+        if ($this->shouldDiscardFlow($node_info, $flowRef)) {
             return;
         }
 
         # match all flow rules based on category and apply them
         # TODO cache node's category or cache rules applicable to the node
         my $category = $node_info->{'category'};
+
+        # TODO: is it really undef or '' when a node doesn't have a category assigned?
+        if (!defined($category)) {
+            return $this->onUncategorizedNode($node_info, $flowRef);
+        }
+
         my $netflow_conf = $this->getNetflowConf();
         my @rules = $this->getRulesIdForCategory($netflow_conf, $category);
 
         if (@rules) {
             # TODO so far, only whitelist processing
             # I should actually branch into whitelist and blacklist processing at this point
-            my $result = $this->matchFlowAgainstRules($flowRef, $netflow_conf, @rules);
-            if ($result) {
-                $logger->debug("flow matched allowed rule id: \"$result\".");
+            my $matched_rule = $this->matchFlowAgainstRules($flowRef, $netflow_conf, @rules);
+            if ($matched_rule) {
+                return $this->onAuthorizedFlow($node_info, $POLICY::WHITELIST, $matched_rule, $flowRef);
             } else {
-                $logger->info("flow didn't match any whitelist rule! Reporting flow as a violation. "
-                    . "trigger id: " . $netflow_conf->{$category}->{'id'} . " "
-                    . "description: " . $netflow_conf->{$category}->{'description'} . " "
-                    . "flow details: " . $this->flowToString($flowRef)
-                );
-                violation_trigger($srcMac, $netflow_conf->{$category}->{'id'}, "flow");
+                my $trigger = { 
+                    'id' => $netflow_conf->{$category}->{'id'},
+                    'description' => $netflow_conf->{$category}->{'description'}
+                };
+                return $this->onUnauthorizedFlow($node_info, $POLICY::WHITELIST, undef, $trigger, $flowRef);
             }
         }
     } else {
-        # TODO: what should be done about it?
-        $logger->warn("Flow about a node unknown to PacketFence! MAC: $srcMac");
+        return $this->onUnknownSource($srcMac, $flowRef);
     }
+}
+
+=item shouldDiscardFlow
+
+If it returns 1, the flow will be discarded and not processed. Meant to be overridden in pf::flow::custom with custom
+behavior.
+
+=cut
+sub shouldDiscardFlow {
+    my ($this, $node_info, $flowRef) = @_;
+
+    return 0;
+}
+
+=item onAuthorizedFlow
+
+Called when a flow is seen as authorized.
+Meant to be easily overridden in pf::flow::custom with custom behavior.
+
+=cut
+sub onAuthorizedFlow {
+    # $matched_rule will be undef if policy is blacklist
+    my ($this, $node_info, $policy, $matched_rule, $flowRef) = @_;
+    my $logger = Log::Log4perl->get_logger("pf::flow");
+
+    if ($policy eq $POLICY::WHITELIST) {
+        $logger->debug("flow matched allowed rule id: \"$matched_rule\".");
+    } else {
+        $logger->debug("flow didn't match any blacklisted traffic pattern: allowed");
+    }
+    return 1;
+}
+
+=item onUnauthorizedFlow
+
+Called when a flow is seen as unauthorized.
+Meant to be easily overridden in pf::flow::custom with custom behavior.
+
+=cut
+sub onUnauthorizedFlow {
+    # $matched_rule will be undef if policy is whitelist
+    # $trigger is a hashref with id and description taken from netflow.conf
+    my ($this, $node_info, $policy, $matched_rule, $trigger, $flowRef) = @_;
+    my $logger = Log::Log4perl->get_logger("pf::flow");
+
+    if ($policy eq $POLICY::BLACKLIST) {
+        $logger->debug("flow matched disallowed rule id: \"$matched_rule\".");
+    } else {
+        $logger->debug("flow didn't match any whitelisted traffic pattern: disallowed");
+    }
+
+    # TODO flowToString should be removed before release
+    $logger->info("flow is not authorized according to rules! Reporting flow as a violation. "
+        . "trigger id: " . $trigger->{'id'} . " "
+        . "description: " . $trigger->{'description'} . " "
+        . "flow details: " . $this->flowToString($flowRef)
+    );
+
+    violation_trigger($node_info->{'mac'}, $trigger_id, "flow");
+
+    return 1;
+}
+
+=item onUnknownSource
+
+Called when a source MAC is unknown to the system.
+Meant to be easily overridden in pf::flow::custom with custom behavior.
+
+=cut
+sub onUnknownSource {
+    my ($this, $srcMac, $flowRef) = @_;
+    my $logger = Log::Log4perl->get_logger("pf::flow");
+
+    $logger->warn("Flow about a node unknown to PacketFence! MAC: $srcMac flow: ".$this->flowToString($flowRef));
+
+    return;
+}
+
+=item onUncategorizedNode
+
+Called when a node doesn't have a category.
+Meant to be easily overridden in pf::flow::custom with custom behavior.
+
+=cut
+sub onUncategorizedNode {
+    my ($this, $node_info, $flowRef) = @_;
+    my $logger = Log::Log4perl->get_logger("pf::flow");
+
+    $logger->debug("Flow about a node with no category");
+
+    return;
 }
 
 sub matchFlowAgainstRules {
@@ -224,22 +322,6 @@ sub portFilter {
             return 1;
         }
     }
-    return 0;
-}
-
-=item shouldDiscardFlow
-
-If it returns 1, the flow will be discarded and not processed. Meant to be overridden.
-
-=cut
-sub shouldDiscardFlow {
-    my ($this, $flowRef, $node_info) = @_;
-
-    # not useful to process node without a category
-    if (!defined($node_info->{'category'})) {
-        return 1;
-    }
-
     return 0;
 }
 

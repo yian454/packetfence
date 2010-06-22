@@ -1,18 +1,19 @@
 To implement before considering feature done:
 
+- IP filters should support dash ie: 192.168.1-128.*
 - Integrate pfnetflowd as a pf service (start with pf, etc.)
 - Present pfnetflowd's running status under Web admin's Admin tab
 x Package Net::Flow ourselves (its not in rpmforge) and add as a dep into spec
 - Basic tests
 - Performance testing (based on expected flow traffic)
-- Under load it should re-act as snort: do what it can up to maxing one core, discard to stay current, not queue
+- Under load it should react as snort: do what it can up to maxing one core, discard to stay current, not queue
 - Provide UI to edit conf/netflow.conf
 - Finish the reload_sighandler portion so we can reload the config without a full stop / start cycle
 
 Before merge in trunk:
 - Re-assess all TODO, FIXME and XXX tasks
 
-Testing required:
+Lab Testing required:
 - Multiple flow sources, what will happen with the templates (incl. learned ones)?
 - So far, flows gathered by the router in the lab are all LAN to WAN which is very convenient. 
   However, I suspect that they could be in the other direction too. It should be explicitly 

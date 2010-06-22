@@ -26,6 +26,7 @@ use pf::node;
 use pf::violation;
 
 # Be careful with these since it won't be inherited by subclasses
+# TODO: I should wrap them behind accessor methods
 our $TemplateArrayRef = undef;
 our $templateReceivedFlag = 0;
 
@@ -35,7 +36,9 @@ our $templateReceivedFlag = 0;
 
 =cut
 
-=item * new - get a new instance of the flow object
+=item new
+
+Get a new instance of the flow object
  
 =cut
 sub new {
@@ -48,7 +51,10 @@ sub new {
 
 =item processFlowPacket
 
-parses a flow packet and decompose it in several streams
+Parses a flow packet. It decompose it in several streams using Net::Flow then pass each stream to parseFlow() if a 
+template exists.
+
+Returns undef if no template has been received yet (since we cannot interpret the flow). Otherwise returns 1.
 
 =cut
 sub processFlowPacket {
@@ -76,11 +82,13 @@ sub processFlowPacket {
 
     if (!@{$TemplateArrayRef}) {
         $logger->debug("No template received yet. Can't parse the netflow/IPFIX until a template has been received");
+        return;
     } 
 
     foreach my $flowRef (@{$FlowArrayRef}) {
         $this->parseFlow($flowRef);
     }
+    return 1;
 }
 
 
@@ -99,7 +107,7 @@ sub parseFlow {
     # so src MAC is what we are looking to monitor
 
     # TODO naive implementation, caching will need to be involved for any of this to scale
-    # for caching, Cache would be interesting (packaged as perl-Cache)
+    # for caching, the modern CHI (unpackaged) or less-modern Cache (packaged as perl-Cache) would be interesting
     my $srcMac = $this->getSourceMAC($flowRef);
     my $node_info = node_view($srcMac);
     if (defined($node_info) && ref($node_info) eq 'HASH') {
@@ -156,9 +164,9 @@ sub matchFlowAgainstRules {
     return $matches;
 }
 
-=sub ipFilter
+=item ipFilter
 
-Tells if IP is listed in filter. Supported expressions are * at the group and at the single digit level.
+Tells if IP is listed in filter. Supported expressions are * at the group level and at the single digit level.
 
 =cut
 sub ipFilter {
@@ -190,7 +198,7 @@ sub ipFilter {
     return 0;
 }
 
-=sub portFilter
+=item portFilter
 
 Tells if port is listed in filter. Supported expressions are , * and -.
 

@@ -9,6 +9,7 @@ x Package Net::Flow ourselves (its not in rpmforge) and add as a dep into spec
 - Under load it should react as snort: do what it can up to maxing one core, discard to stay current, not queue
 - Provide UI to edit conf/netflow.conf
 - Finish the reload_sighandler portion so we can reload the config without a full stop / start cycle
+- Strict validation of conf file on loading (if validation doesn't pass, don't reload)
 
 Before merge in trunk:
 - Re-assess all TODO, FIXME and XXX tasks

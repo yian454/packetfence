@@ -466,6 +466,7 @@ fi
 %dir                    /usr/local/pf/lib/pf/floatingdevice
 %config(noreplace)      /usr/local/pf/lib/pf/floatingdevice/custom.pm
 %dir                    /usr/local/pf/lib/pf/flow
+                        /usr/local/pf/lib/pf/flow/constants.pm
 %config(noreplace)      /usr/local/pf/lib/pf/flow/custom.pm
 %dir                    /usr/local/pf/lib/pf/lookup
 %config(noreplace)      /usr/local/pf/lib/pf/lookup/node.pm
@@ -508,6 +509,9 @@ fi
 %dir                    /usr/local/pf/var
 
 %changelog
+* Mon Jun 22 2010 Olivier Bilodeau <obilodeau@inverse.ca>
+- Added pf::flow::constants (new code file)
+
 * Mon Jun 21 2010 Olivier Bilodeau <obilodeau@inverse.ca>
 - Added files for new pfnetflowd daemon.
 - Added perl(Net::Flow) as a dependency. Required by pfnetflowd.

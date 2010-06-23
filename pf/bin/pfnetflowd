@@ -6,12 +6,11 @@ pfnetflow - listen to netflow/IPFIX traffic and create PF violations
 
 =head1 SYNOPSIS
 
-pfnetflow -i <interface> -p <port> [options]
-
- Otherwise specified port 4739 is assumed.
+pfnetflow -i <interface> [options]
 
  Options:
    -c     Alternate flow rules file (defaults to conf/netflow.conf)
+   -p     Port to listen on (defaults to 4739)
    -d     Daemonize
    -h     Help
 

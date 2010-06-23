@@ -206,7 +206,7 @@ sub onUnauthorizedFlow {
         . "flow details: " . $this->flowToString($flowRef)
     );
 
-    violation_trigger($node_info->{'mac'}, $trigger_id, "flow");
+    violation_trigger($node_info->{'mac'}, $trigger->{'id'}, "flow");
 
     return 1;
 }

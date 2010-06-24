@@ -1,19 +1,29 @@
 To implement before considering feature done:
 
+x Package Net::Flow ourselves (its not in rpmforge) and add as a dep into spec
+- New case to handle in whitelist mode: trafic for a node category that has no node category rules defined
 - IP filters should support dash ie: 192.168.1-128.*
+- Support the DIRECTION flag of the netflow spec field 61 (avoid to have external traffic trigger rules)
 - Integrate pfnetflowd as a pf service (start with pf, etc.)
 - Present pfnetflowd's running status under Web admin's Admin tab
-x Package Net::Flow ourselves (its not in rpmforge) and add as a dep into spec
-- Basic tests
-- Performance testing (based on expected flow traffic)
-- Under load it should react as snort: do what it can up to maxing one core, discard to stay current, not queue
 - Provide UI to edit conf/netflow.conf
-- Finish the reload_sighandler portion so we can reload the config without a full stop / start cycle
+- Support blacklist mode
+- Finish writing basic unit tests (there's a FIXME task bookmark)
+- Performance testing and measurements (based on expected flow traffic)
+- Implement Caching mechanisms (remember category lookup for a node, remember node with violations)
 - Strict validation of conf file on loading (if validation doesn't pass, don't reload)
-- Support the DIRECTION flag of the netflow spec field 61 (avoid to have external traffic trigger rules)
+- Finish the reload_sighandler portion so we can reload the config without a full stop / start cycle
 
 Before merge in trunk:
 - Re-assess all TODO, FIXME and XXX tasks
+
+Once merged in trunk:
+- File all out-standing items in issue tracker
+- Copy this into the wiki
+- Delete this file
+
+Requirements:
+- Under load it should react as snort: do what it can up to maxing one core, discard to stay current, not queue
 
 Lab Testing required:
 - Multiple flow sources, what will happen with the templates (incl. learned ones)?

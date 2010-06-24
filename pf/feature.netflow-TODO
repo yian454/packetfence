@@ -10,15 +10,18 @@ x Package Net::Flow ourselves (its not in rpmforge) and add as a dep into spec
 - Provide UI to edit conf/netflow.conf
 - Finish the reload_sighandler portion so we can reload the config without a full stop / start cycle
 - Strict validation of conf file on loading (if validation doesn't pass, don't reload)
+- Support the DIRECTION flag of the netflow spec field 61 (avoid to have external traffic trigger rules)
 
 Before merge in trunk:
 - Re-assess all TODO, FIXME and XXX tasks
 
 Lab Testing required:
 - Multiple flow sources, what will happen with the templates (incl. learned ones)?
-- So far, flows gathered by the router in the lab are all LAN to WAN which is very convenient. 
+x So far, flows gathered by the router in the lab are all LAN to WAN which is very convenient. 
   However, I suspect that they could be in the other direction too. It should be explicitly 
   tested. Do we need another ingress statement on the outgoing interface or not?
+  => Flows are always displayed in the same orientation (LAN src WAN dst) even if the traffic is
+     initiated from the WAN. However, a direction flag is available in the flow to see if it's ingress or egress.
   
 Future
-- Package a seperate netflow/ipfix processor (the bin/ and related libs)
+- Package a seperate netflow/ipfix processor (the bin/ and related libs, a la pfdetect_remote)

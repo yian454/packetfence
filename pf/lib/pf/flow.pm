@@ -106,11 +106,11 @@ sub parseFlow {
 
     $logger->trace($this->flowToString($flowRef));
         
-    # TODO: so far flows are always oriented the right way (there's a task in TODO to validate that)
-    # so src MAC is what we are looking to monitor
-
     # TODO naive implementation, caching will need to be involved for any of this to scale
     # for caching, the modern CHI (unpackaged) or less-modern Cache (packaged as perl-Cache) would be interesting
+        
+    # flows are always oriented LAN to WAN because of configuration provided
+    # so src MAC is what we are looking to monitor
     my $srcMac = $this->getSourceMAC($flowRef);
     my $node_info = node_view($srcMac);
     if (defined($node_info) && ref($node_info) eq 'HASH') {
@@ -131,19 +131,42 @@ sub parseFlow {
         }
 
         my $netflow_conf = $this->getNetflowConf();
-        my @rules = $this->getRulesIdForCategory($netflow_conf, $category);
 
-        # TODO so far, only whitelist processing
-        # I should actually branch into whitelist and blacklist processing at this point
+        # if there are no section for this category, stop here
+        if (!defined($netflow_conf->{$category})) {
+            return $this->onNoSectionDefinedForCategory($node_info, $category, $flowRef);
+        }
+
+        # grabbing rules to apply for a node category
+        my @rules = $this->getRulesIdForCategory($netflow_conf, $category);
+        my $policy = $netflow_conf->{$category}->{'policy'};
+
+        # rule matcher, will return first rule id that matches
         my $matched_rule = $this->matchFlowAgainstRules($flowRef, $netflow_conf, @rules);
-        if ($matched_rule) {
-            return $this->onAuthorizedFlow($node_info, $POLICY::WHITELIST, $matched_rule, $flowRef);
-        } else {
+
+        # match in whitelist is an authorized flow
+        if ($matched_rule && $policy eq $POLICY::WHITELIST) {
+            return $this->onAuthorizedFlow($node_info, $policy, $matched_rule, $flowRef);
+
+        # match in blacklist is an unauthorized flow
+        } elsif ($matched_rule && $policy eq $POLICY::BLACKLIST) {
+            my $trigger = {
+                'id' => $netflow_conf->{$category}->{'id'},
+                'description' => $netflow_conf->{$category}->{'description'}
+            };
+            return $this->onUnauthorizedFlow($node_info, $policy, $matched_rule, $trigger, $flowRef);
+
+        # no match in whitelist is an unauthorized flow
+        } elsif (!$matched_rule && $policy eq $POLICY::WHITELIST) {
             my $trigger = { 
                 'id' => $netflow_conf->{$category}->{'id'},
                 'description' => $netflow_conf->{$category}->{'description'}
             };
-            return $this->onUnauthorizedFlow($node_info, $POLICY::WHITELIST, undef, $trigger, $flowRef);
+            return $this->onUnauthorizedFlow($node_info, $policy, undef, $trigger, $flowRef);
+
+        # no match in blacklist is an authorized flow
+        } elsif (!$matched_rule && $policy eq $POLICY::BLACKLIST) {
+            return $this->onAuthorizedFlow($node_info, $policy, undef, $flowRef);
         }
     } else {
         return $this->onUnknownSource($srcMac, $flowRef);
@@ -221,6 +244,7 @@ sub onUnknownSource {
     my ($this, $srcMac, $flowRef) = @_;
     my $logger = Log::Log4perl->get_logger("pf::flow");
 
+    # TODO consider putting some parameter in pf.conf: netflow.violation_on_unknown_mac=enabled|disabled
     $logger->warn("Flow about a node unknown to PacketFence! MAC: $srcMac flow: ".$this->flowToString($flowRef));
 
     return;
@@ -236,7 +260,25 @@ sub onUncategorizedNode {
     my ($this, $node_info, $flowRef) = @_;
     my $logger = Log::Log4perl->get_logger("pf::flow");
 
+    # TODO consider putting some parameter in pf.conf: netflow.violation_on_uncategorized_node=enabled|disabled
     $logger->debug("Flow about a node with no category");
+
+    return;
+}
+
+=item onNoSectionDefinedForCategory
+
+Called when a flow is detected and resolved to a category but the category doesn't have a section in the configuration.
+
+Meant to be easily overridden in pf::flow::custom with custom behavior.
+
+=cut
+sub onNoSectionDefinedForCategory {
+    my ($this, $node_info, $category, $flowRef) = @_;
+    my $logger = Log::Log4perl->get_logger("pf::flow");
+
+    # TODO consider putting some parameter in pf.conf: netflow.violation_on_unmatched_flows=enabled|disabled
+    $logger->debug("Flow without a category match in configuration file. Category: $category");
 
     return;
 }
@@ -423,6 +465,7 @@ Simple accessor to encapsulate the way I currently store %netflow_conf
 =cut
 sub getNetflowConf {
     # provided by pfnetflow's main package, returning a ref to avoid copy
+    # TODO: this causes a warning on compilation, is there a way to prevent it?
     return \%::netflow_conf;
 }
 

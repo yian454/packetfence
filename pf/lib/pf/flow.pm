@@ -310,6 +310,11 @@ Tells if IP is listed in filter. Supported expressions are * at the group level 
 sub ipFilter {
     my ($this, $ip, $filter) = @_;
 
+    # processing ranges first. Altering the filter on match to reflect the IP value that matched.
+    if ($filter =~ /\b\d+-\d+\b/) {
+        $filter = $this->processIpRange($ip, $filter);
+    }
+
     # TODO regexp pre-compilation could be useful: http://www.stonehenge.com/merlyn/UnixReview/col28.html
     # \Q..\E is to quote regexp characters in $filter so that ie . won't match
     if ($ip =~ /^\Q$filter\E$/) {
@@ -368,6 +373,25 @@ sub portFilter {
         }
     }
     return 0;
+}
+
+sub processIpRange {
+    my ($this, $ip, $filter) = @_;
+
+    # this is a very naive approach, I couldn't do better at the time. Feel free to suggest an improved version.
+    @ip_groups = split('.', $ip);
+    @filter_groups = split('.', $filter);
+
+    # processing each group one at a time
+    for (my $i = 0; $i < 4; $i++) {
+        if ($filter_groups[$i] =~ /^(\d+)-(\d+)$/) {
+            if ($ip_groups[$i] >= $1 && $ip_groups[$i] <= $2) {
+                # replacing filter by actual IP for further processing
+                $filter_groups[$i] = $ip_groups[$i];
+            }
+        }
+    }
+    return(join('.', @filter_groups));
 }
 
 # information about what is in flows in RFC3954 (see references)

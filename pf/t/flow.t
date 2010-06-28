@@ -10,7 +10,7 @@ my $logger = Log::Log4perl->get_logger( basename($0) );
 Log::Log4perl::MDC->put( 'proc', basename($0) );
 Log::Log4perl::MDC->put( 'tid',  0 );
 
-use Test::More tests => 22;
+use Test::More tests => 28;
 
 use lib '/usr/local/pf/lib';
 use pf::config;
@@ -97,6 +97,9 @@ ok($flow->ipFilter('10.66.0.100', '*.66.0.*'), "ipFilter matching with group IP 
 # Match with digit wildcard
 ok($flow->ipFilter('10.66.0.100', '10.*6.0.100'), "ipFilter matching digit wildcard");
 
+# Match with range
+ok($flow->ipFilter('10.66.0.100', '10.12-70.0.100'), "ipFilter with range match (- operator)");
+
 # --- ipFilter trying to trick the system ---
 # Making sure . is not intepreted as regexp .
 ok(!$flow->ipFilter('10.66.09100', '10.66.0.100'), "ipFilter . not interpreted as regexp");
@@ -104,6 +107,13 @@ ok(!$flow->ipFilter('10.66.0.100', '10.66.09100'), "ipFilter . not interpreted a
 
 # tricking wildcard
 ok(!$flow->ipFilter('10.6.0.100', '10.*6.0.100'), "ipFilter weird wildcard");
+
+# tricking dash operator
+ok(!$flow->ipFilter('10.6.0.100', '10.60-66.0.*'), "ipFilter outside of range doesn't match range");
+ok(!$flow->ipFilter('10.62.0.100', '10.60-66.10.*'), "ipFilter outside of range doesn't match some place else");
+ok($flow->ipFilter('10.66.0.100', '10.60-66.0.*'), "ipFilter range + wildcard match");
+ok($flow->ipFilter('10.66.45.100', '10.60-66.40-60.100'), "ipFilter multi range full match");
+ok($flow->ipFilter('10.66.45.100', '10.60-66.40-60.*'), "ipFilter multi range + wildcard match");
 
 # --- portFilter working cases ---
 # Match a full IP

@@ -63,20 +63,20 @@ our %netflow_conf = $flow->read_netflow_conf($configfile)
 # TODO: flow that triggers onUnknownSource() (mock it with custom return value expected by the test)
 
 # shouldDiscardFlow - should always return 0
-ok(!$flow->shouldDiscardFlow(undef, undef), "shouldDiscardFlow always returns 0 (default)");
+#ok(!$flow->shouldDiscardFlow(undef, undef), "shouldDiscardFlow always returns 0 (default)");
 
 # onAuthorizedFlow - should always return 1
-ok($flow->onAuthorizedFlow($node_info, $policy, $matched_rule, $flowRef), "onAuthorizedFlow always returns 1 (default)");
+#ok($flow->onAuthorizedFlow($node_info, $policy, $matched_rule, $flowRef), "onAuthorizedFlow always returns 1 (default)");
 
 # onUnauthorizedFlow - should always return 1
 # TODO: mock violation_trigger
-ok($flow->onUnauthorizedFlow($node_info, $policy, $matched_rule, $trigger, $flowRef), "onUnauthorizedFlow always returns 1 (default)");
+#ok($flow->onUnauthorizedFlow($node_info, $policy, $matched_rule, $trigger, $flowRef), "onUnauthorizedFlow always returns 1 (default)");
 
 # onUnknownSource - should always return undef
-ok(!$flow->onUnknownSource('aa:bb:cc:dd:ee:ff', $flowRef), "onUnknownSourc always returns undef (default)");
+#ok(!$flow->onUnknownSource('aa:bb:cc:dd:ee:ff', $flowRef), "onUnknownSourc always returns undef (default)");
 
 # onUncategorizedNode - should always return undef
-ok(!$flow->onUncategorizedNod($node_info, $flowRef), "onUncategorizedNode always returns undef (default)");
+#ok(!$flow->onUncategorizedNod($node_info, $flowRef), "onUncategorizedNode always returns undef (default)");
 
 # FIXME: I am at matchFlowAgainstRules()
 
@@ -123,6 +123,8 @@ ok($flow->portFilter('25', '22-26,135'), "portFilter matching a port in a list e
 # 100 in 22,23,25,100,135 but not in 10,1000,1443 or 1100,1443
 ok(!$flow->portFilter('100', '10,1000,1443'), "portFilter shouldn't match but 100 is in 1000");
 ok(!$flow->portFilter('100', '1100,1443'), "portFilter shouldn't match but 100 is in 1100");
+# Multiple range matches
+ok($flow->portFilter('1000', '10-100,999-1005'), "portFilter with more than one range");
 
 =item setup
 

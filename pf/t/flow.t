@@ -10,7 +10,7 @@ my $logger = Log::Log4perl->get_logger( basename($0) );
 Log::Log4perl::MDC->put( 'proc', basename($0) );
 Log::Log4perl::MDC->put( 'tid',  0 );
 
-use Test::More tests => 21;
+use Test::More tests => 22;
 
 use lib '/usr/local/pf/lib';
 use pf::config;

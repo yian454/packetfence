@@ -357,9 +357,14 @@ sub portFilter {
         # ex: 100 in 22,23,25,100,135 but not in 10,1000,1443 or 1100,1443
         return 1;
     } elsif ($filter =~ /\b(\d+)-(\d+)\b/) {
-        # matches xxx-xxx with correct boundaries
-        if (($port >= $1) && ($port <= $2)) {
-            return 1;
+        # here I will alter the filter removing each attempted range so I create a local copy
+        my $f = $filter;
+        # trying to match the port in all port ranges (destroying the range so loop iteration will match the next)
+        while ($f =~ s/\b(\d+)-(\d+)\b//) {
+            # matches xxx-xxx with correct boundaries
+            if (($port >= $1) && ($port <= $2)) {
+                return 1;
+            }
         }
     }
     return 0;

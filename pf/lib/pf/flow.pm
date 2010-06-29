@@ -304,7 +304,7 @@ sub matchFlowAgainstRules {
 
 =item ipFilter
 
-Tells if IP is listed in filter. Supported expressions are * at the group level and at the single digit level.
+Tells if IP is listed in filter. Supported expressions are - and * (at the group level and at the single digit level).
 
 =cut
 sub ipFilter {
@@ -375,12 +375,19 @@ sub portFilter {
     return 0;
 }
 
+=item processIpRange
+
+Takes the range in a filter expression and transforms it if it matches to allow further filter procesing. 
+For example: input filter 10.12-70.0.* with ip 10.66.0.100 will return 10.66.0.*
+
+This is a very naive approach, I couldn't do better at the time. Feel free to suggest an improved version.
+
+=cut
 sub processIpRange {
     my ($this, $ip, $filter) = @_;
 
-    # this is a very naive approach, I couldn't do better at the time. Feel free to suggest an improved version.
-    @ip_groups = split('.', $ip);
-    @filter_groups = split('.', $filter);
+    my @ip_groups = split('\.', $ip);
+    my @filter_groups = split('\.', $filter);
 
     # processing each group one at a time
     for (my $i = 0; $i < 4; $i++) {

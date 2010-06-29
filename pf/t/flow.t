@@ -41,8 +41,8 @@ can_ok($flow, qw(
     read_netflow_conf
     getNetflowConf
     getRulesIdForCategory
-    ipFilter
-    portFilter
+    isIpInFilter
+    isPortInFilter
 ));
 
 # processFlowPacket
@@ -80,61 +80,61 @@ our %netflow_conf = $flow->read_netflow_conf($configfile)
 
 # FIXME: I am at matchFlowAgainstRules()
 
-# --- ipFilter working cases ---
+# --- isIpInFilter working cases ---
 # Match a full IP
-ok($flow->ipFilter('10.66.0.100', '10.66.0.100'), "ipFilter matching an IP");
+ok($flow->isIpInFilter('10.66.0.100', '10.66.0.100'), "isIpInFilter matching an IP");
 
 # Match with full wildcard
-ok($flow->ipFilter('10.66.0.100', '*'), "ipFilter matching with full IP wildcard");
+ok($flow->isIpInFilter('10.66.0.100', '*'), "isIpInFilter matching with full IP wildcard");
 
 # Match with group wildcard
-ok($flow->ipFilter('10.66.0.100', '*.66.0.100'), "ipFilter matching with group IP wildcard first group");
-ok($flow->ipFilter('10.66.0.100', '10.*.0.100'), "ipFilter matching with group IP wildcard second group");
-ok($flow->ipFilter('10.66.0.100', '10.66.*.100'), "ipFilter matching with group IP wildcard third group");
-ok($flow->ipFilter('10.66.0.100', '10.66.0.*'), "ipFilter matching with group IP wildcard fourth group");
-ok($flow->ipFilter('10.66.0.100', '*.66.0.*'), "ipFilter matching with group IP wildcard multi-match");
+ok($flow->isIpInFilter('10.66.0.100', '*.66.0.100'), "isIpInFilter matching with group IP wildcard first group");
+ok($flow->isIpInFilter('10.66.0.100', '10.*.0.100'), "isIpInFilter matching with group IP wildcard second group");
+ok($flow->isIpInFilter('10.66.0.100', '10.66.*.100'), "isIpInFilter matching with group IP wildcard third group");
+ok($flow->isIpInFilter('10.66.0.100', '10.66.0.*'), "isIpInFilter matching with group IP wildcard fourth group");
+ok($flow->isIpInFilter('10.66.0.100', '*.66.0.*'), "isIpInFilter matching with group IP wildcard multi-match");
 
 # Match with digit wildcard
-ok($flow->ipFilter('10.66.0.100', '10.*6.0.100'), "ipFilter matching digit wildcard");
+ok($flow->isIpInFilter('10.66.0.100', '10.*6.0.100'), "isIpInFilter matching digit wildcard");
 
 # Match with range
-ok($flow->ipFilter('10.66.0.100', '10.12-70.0.100'), "ipFilter with range match (- operator)");
+ok($flow->isIpInFilter('10.66.0.100', '10.12-70.0.100'), "isIpInFilter with range match (- operator)");
 
-# --- ipFilter trying to trick the system ---
+# --- isIpInFilter trying to trick the system ---
 # Making sure . is not intepreted as regexp .
-ok(!$flow->ipFilter('10.66.09100', '10.66.0.100'), "ipFilter . not interpreted as regexp");
-ok(!$flow->ipFilter('10.66.0.100', '10.66.09100'), "ipFilter . not interpreted as regexp (case 2)");
+ok(!$flow->isIpInFilter('10.66.09100', '10.66.0.100'), "isIpInFilter . not interpreted as regexp");
+ok(!$flow->isIpInFilter('10.66.0.100', '10.66.09100'), "isIpInFilter . not interpreted as regexp (case 2)");
 
 # tricking wildcard
-ok(!$flow->ipFilter('10.6.0.100', '10.*6.0.100'), "ipFilter weird wildcard");
+ok(!$flow->isIpInFilter('10.6.0.100', '10.*6.0.100'), "isIpInFilter weird wildcard");
 
 # tricking dash operator
-ok(!$flow->ipFilter('10.6.0.100', '10.60-66.0.*'), "ipFilter outside of range doesn't match range");
-ok(!$flow->ipFilter('10.62.0.100', '10.60-66.10.*'), "ipFilter outside of range doesn't match some place else");
-ok($flow->ipFilter('10.66.0.100', '10.60-66.0.*'), "ipFilter range + wildcard match");
-ok($flow->ipFilter('10.66.45.100', '10.60-66.40-60.100'), "ipFilter multi range full match");
-ok($flow->ipFilter('10.66.45.100', '10.60-66.40-60.*'), "ipFilter multi range + wildcard match");
+ok(!$flow->isIpInFilter('10.6.0.100', '10.60-66.0.*'), "isIpInFilter outside of range doesn't match range");
+ok(!$flow->isIpInFilter('10.62.0.100', '10.60-66.10.*'), "isIpInFilter outside of range doesn't match some place else");
+ok($flow->isIpInFilter('10.66.0.100', '10.60-66.0.*'), "isIpInFilter range + wildcard match");
+ok($flow->isIpInFilter('10.66.45.100', '10.60-66.40-60.100'), "isIpInFilter multi range full match");
+ok($flow->isIpInFilter('10.66.45.100', '10.60-66.40-60.*'), "isIpInFilter multi range + wildcard match");
 
-# --- portFilter working cases ---
+# --- isPortInFilter working cases ---
 # Match a full IP
-ok($flow->portFilter('80', '80'), "portFilter matching a port");
+ok($flow->isPortInFilter('80', '80'), "isPortInFilter matching a port");
 
 # Match with wildcard
-ok($flow->portFilter('80', '*'), "portFilter matching a port with wildcard");
+ok($flow->isPortInFilter('80', '*'), "isPortInFilter matching a port with wildcard");
 
 # Match with comma seperator
-ok($flow->portFilter('100', '22,23,25,100,135'), "portFilter matching a port in a comma-seperated portlist");
+ok($flow->isPortInFilter('100', '22,23,25,100,135'), "isPortInFilter matching a port in a comma-seperated portlist");
 
 # Match with list expansion
-ok($flow->portFilter('25', '22-26,135'), "portFilter matching a port in a list expansion (xxx-xxx) portlist");
+ok($flow->isPortInFilter('25', '22-26,135'), "isPortInFilter matching a port in a list expansion (xxx-xxx) portlist");
 
 # --- trying to trick the system ---
 # Making sure a port which is a subset of another port doesn't match
 # 100 in 22,23,25,100,135 but not in 10,1000,1443 or 1100,1443
-ok(!$flow->portFilter('100', '10,1000,1443'), "portFilter shouldn't match but 100 is in 1000");
-ok(!$flow->portFilter('100', '1100,1443'), "portFilter shouldn't match but 100 is in 1100");
+ok(!$flow->isPortInFilter('100', '10,1000,1443'), "isPortInFilter shouldn't match but 100 is in 1000");
+ok(!$flow->isPortInFilter('100', '1100,1443'), "isPortInFilter shouldn't match but 100 is in 1100");
 # Multiple range matches
-ok($flow->portFilter('1000', '10-100,999-1005'), "portFilter with more than one range");
+ok($flow->isPortInFilter('1000', '10-100,999-1005'), "isPortInFilter with more than one range");
 
 =item setup
 

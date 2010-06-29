@@ -290,10 +290,10 @@ sub matchFlowAgainstRules {
     my $matches = 0;
     foreach my $rule_id (@rules) {
 
-        my $srcip_match = $this->ipFilter($this->getSourceIP($flowRef), $netflow_conf->{$rule_id}->{'src_ip'});
-        my $srcport_match = $this->portFilter($this->getSourcePort($flowRef), $netflow_conf->{$rule_id}->{'src_port'});
-        my $dstip_match = $this->ipFilter($this->getDestIP($flowRef), $netflow_conf->{$rule_id}->{'dst_ip'});
-        my $dstport_match = $this->portFilter($this->getDestPort($flowRef), $netflow_conf->{$rule_id}->{'dst_port'});
+        my $srcip_match = $this->isIpInFilter($this->getSourceIP($flowRef), $netflow_conf->{$rule_id}->{'src_ip'});
+        my $srcport_match = $this->isPortInFilter($this->getSourcePort($flowRef), $netflow_conf->{$rule_id}->{'src_port'});
+        my $dstip_match = $this->isIpInFilter($this->getDestIP($flowRef), $netflow_conf->{$rule_id}->{'dst_ip'});
+        my $dstport_match = $this->isPortInFilter($this->getDestPort($flowRef), $netflow_conf->{$rule_id}->{'dst_port'});
 
         if ($srcip_match && $srcport_match && $dstip_match && $dstport_match) {
             $matches = $rule_id;
@@ -302,12 +302,12 @@ sub matchFlowAgainstRules {
     return $matches;
 }
 
-=item ipFilter
+=item isIpInFilter
 
 Tells if IP is listed in filter. Supported expressions are - and * (at the group level and at the single digit level).
 
 =cut
-sub ipFilter {
+sub isIpInFilter {
     my ($this, $ip, $filter) = @_;
 
     # processing ranges first. Altering the filter on match to reflect the IP value that matched.
@@ -341,12 +341,12 @@ sub ipFilter {
     return 0;
 }
 
-=item portFilter
+=item isPortInFilter
 
 Tells if port is listed in filter. Supported expressions are , * and -.
 
 =cut
-sub portFilter {
+sub isPortInFilter {
     my ($this, $port, $filter) = @_;
 
     # TODO regexp pre-compilation could be useful: http://www.stonehenge.com/merlyn/UnixReview/col28.html

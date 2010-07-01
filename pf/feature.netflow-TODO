@@ -3,10 +3,11 @@ To implement before considering feature done:
 x Package Net::Flow ourselves (its not in rpmforge) and add as a dep into spec
 x New case to handle: trafic for a node category that has no node category rules defined
 x IP filters should support dash ie: 192.168.1-128.*
-- Support the DIRECTION flag of the netflow spec field 61 (avoid to have external traffic trigger rules)
+- Support the DIRECTION flag of the netflow spec field 61 (avoid to have externally initiated traffic trigger rules)
 - Integrate pfnetflowd as a pf service (start with pf, etc.)
 - Present pfnetflowd's running status under Web admin's Admin tab
 - Provide UI to edit conf/netflow.conf
+- Documentation in Administration guide (netflow section with router config instructions and netflow.conf instructions)
 x Support blacklist mode
 - Test blacklist mode
 - Finish writing basic unit tests (there's a FIXME task bookmark)

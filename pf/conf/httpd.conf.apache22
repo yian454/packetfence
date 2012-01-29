@@ -323,7 +323,6 @@ SetEnvIf User-Agent ".*MSIE.*" \
 
   Alias /favicon.ico %%install_dir%%/html/common/favicon.ico
   Alias /common/ %%install_dir%%/html/common/
-  Alias /cgi-bin/pfcmd.cgi %%install_dir%%/bin/pfcmd
   Alias /docs/ %%install_dir%%/docs/
   # Allows previewing captive-portal remediation pages
   SetEnv VHOST ADMIN
@@ -344,11 +343,6 @@ SetEnvIf User-Agent ".*MSIE.*" \
   # Clean URLS
   RewriteRule ^/guests/manage(.*)$ /guest-management.cgi$1 [PT]
   RewriteRule ^/soh([^.]*)$ /soh.cgi$1 [PT]
-
-  <Location /cgi-bin/pfcmd.cgi>
-    SetHandler cgi-script
-    Options Indexes FollowSymLinks ExecCGI
-  </Location>
 
   # mod_perl hosted pf::WebAPI (lib/pf/WebAPI.pm)
   PerlPostConfigRequire %%install_dir%%/lib/pf/web/backend_modperl_require.pl

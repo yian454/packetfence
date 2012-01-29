@@ -130,19 +130,6 @@ my %defaults;
 my %myconfig;
 my %documentation;
 
-if ( defined $ENV{GATEWAY_INTERFACE} ) {
-    require CGI;
-    import CGI qw(-no_debug :standard);
-    my $q = new CGI;
-    if ( $q->param('ARGS') ) {
-        @ARGV = $q->param("ARGS");
-        print $q->header;
-    } elsif ( scalar(@ARGV) == 0 ) {
-        print 'ERROR in parameters';
-        return (0);
-    }
-}
-
 # generate pre-compiled grammar
 #Parse::RecDescent->Precompile($grammar, "pfcmd_pregrammar");
 #exit 1;

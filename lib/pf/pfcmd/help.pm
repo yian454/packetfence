@@ -182,13 +182,15 @@ EOT
 
 sub help_nodeaccounting {
     print STDERR << "EOT";
-Usage: pfcmd nodeaccounting view <all|id>
+Usage: pfcmd nodeaccounting view <all|id|ip>
 
 View RADIUS accounting information for a node
 
 examples:
   pfcmd nodeaccounting view all
   pfcmd nodeaccounting view 00:01:02:03:04:05
+For VPN, use external IP:
+  pfcmd nodeaccounting view 188.242.11.22
 EOT
     return 1;
 }

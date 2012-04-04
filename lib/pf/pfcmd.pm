@@ -251,6 +251,7 @@ sub parseCommandLine {
                                    (?:
                                        ( all ) 
                                        | ( $RE{net}{MAC} )
+                                       | ( \d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3} )
                                    )
                                  $ /xms,
          'nodecategory'    => qr{ ^ (?:

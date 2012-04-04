@@ -54,9 +54,11 @@ PFAPI - Web Services handler exposing PacketFence features
 
 use pf::config;
 use pf::iplog;
+use pf::accounting;
 use pf::radius::custom $RADIUS_API_LEVEL;
 use pf::violation;
 use pf::soh::custom $SOH_API_LEVEL;
+use pf::SwitchFactory;
 
 sub event_add {
   my ($class, $date, $srcip, $type, $id) = @_;
@@ -69,6 +71,34 @@ sub event_add {
 
     # trigger a violation
     violation_trigger($srcmac, $id, $type, ( ip => $srcip ));
+
+  } elsif (node_accounting_framedip_exist($srcip)) {
+    # Grab the associated NAS from accounting
+    my $nas_ip = node_accounting_framedip_nas($srcip);
+    my $switch = pf::SwitchFactory->getInstance()->instantiate($nas_ip);
+
+    # is switch object correct?
+    if (!$switch) {
+        $logger->warn("Can't instantiate switch $nas_ip. Are you sure your switches.conf is correct?");
+        return (0);
+    }
+
+    #Is the NAS in production?
+    if (!$switch->isProductionMode()) {
+        $logger->warn("Should perform session disconnect on switch $nas_ip for IP $srcip but the switch "
+            ."is not in production, doing nothing");
+        return (0);
+    }
+    
+    #Is the NAS a VPN concentrator?
+    if ($switch->supportsVPN()) {
+       $logger->info("Performing VPN disconnection for $srcip on NAS $nas_ip");
+       # TODO: Add disconnect code here
+    }
+
+    #In any other case, we do nothing
+    $logger->info("violation on IP $srcip, connected to NAS $nas, with trigger ${type}::${id}: violation not added, the associated NAS is not a VPN concentrator!");
+    return(0);
 
   } else {
     $logger->info("violation on IP $srcip with trigger ${type}::${id}: violation not added, can't resolve IP to mac !");

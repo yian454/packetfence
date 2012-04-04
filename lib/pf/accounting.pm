@@ -30,6 +30,8 @@ BEGIN {
         node_accounting_current_sessionid
         node_accounting_dynauth_attr
         node_accounting_exist
+        node_accounting_framedip_exist
+        node_accounting_framedip_nas
         node_accounting_view
         node_accounting_view_all
         node_accounting_daily_bw
@@ -93,11 +95,19 @@ sub accounting_db_prepare {
         SELECT COUNT(*) FROM radacct WHERE username = ?;
     ]);
 
+    $accounting_statements->{'acct_framedip_exist_sql'} = get_db_handle()->prepare(qq[
+        SELECT COUNT(*) FROM radacct WHERE framedipaddress = ? AND acctstoptime IS NULL;
+    ]);
+
+    $accounting_statements->{'acct_framedip_nas_sql'} = get_db_handle()->prepare(qq[
+        SELECT nasipaddress FROM radacct WHERE framedipaddress = ?;
+    ]);
+
     $accounting_statements->{'acct_view_sql'} = get_db_handle()->prepare(qq[
-        SELECT CONCAT(SUBSTRING(callingstationid,1,2),':',SUBSTRING(callingstationid,3,2),':',SUBSTRING(callingstationid,5,2),':',
-               SUBSTRING(callingstationid,7,2),':',SUBSTRING(callingstationid,9,2),':',SUBSTRING(callingstationid,11,2)) AS mac,
+        SELECT IF(callingstationid REGEXP '^[0-9]{1,3}[.][0-9]{1,3}[.][0-9]{1,3}[.][0-9]{1,3}',callingstationid,CONCAT(SUBSTRING(callingstationid,1,2),':',SUBSTRING(callingstationid,3,2),':',SUBSTRING(callingstationid,5,2),':',
+               SUBSTRING(callingstationid,7,2),':',SUBSTRING(callingstationid,9,2),':',SUBSTRING(callingstationid,11,2))) AS mac,
                username,IF(ISNULL(acctstoptime),'connected','not connected') AS status,acctstarttime,acctstoptime,FORMAT(acctsessiontime/60,2) AS acctsessiontime,
-               nasipaddress,nasportid,nasporttype,acctinputoctets AS acctoutput,
+               nasipaddress,nasportid,nasporttype,framedipaddress,acctinputoctets AS acctoutput,
                acctoutputoctets AS acctinput,(acctinputoctets+acctoutputoctets) AS accttotal,
                IF(ISNULL(acctstoptime),'',acctterminatecause) AS acctterminatecause
         FROM (SELECT * FROM radacct ORDER BY acctstarttime DESC) AS tmp
@@ -106,12 +116,12 @@ sub accounting_db_prepare {
     ]);
 
     $accounting_statements->{'acct_view_all_sql'} = get_db_handle()->prepare(qq[
-        SELECT CONCAT(SUBSTRING(callingstationid,1,2),':',SUBSTRING(callingstationid,3,2),':',SUBSTRING(callingstationid,5,2),':',
-               SUBSTRING(callingstationid,7,2),':',SUBSTRING(callingstationid,9,2),':',SUBSTRING(callingstationid,11,2)) AS mac,
+        IF(callingstationid REGEXP '^[0-9]{1,3}[.][0-9]{1,3}[.][0-9]{1,3}[.][0-9]{1,3}',callingstationid,CONCAT(SUBSTRING(callingstationid,1,2),':',SUBSTRING(callingstationid,3,2),':',SUBSTRING(callingstationid,5,2),':',
+               SUBSTRING(callingstationid,7,2),':',SUBSTRING(callingstationid,9,2),':',SUBSTRING(callingstationid,11,2))) AS mac,
                username,IF(ISNULL(acctstoptime),'connected','not connected') AS status,acctstarttime,acctstoptime,FORMAT(acctsessiontime/60,2) AS acctsessiontime,
-               nasipaddress,nasportid,nasporttype,acctinputoctets AS acctoutput,
+               nasipaddress,nasportid,nasporttype,framedipaddress,acctinputoctets AS acctoutput,
                acctoutputoctets AS acctinput,(acctinputoctets+acctoutputoctets) AS accttotal,
-               IF(ISNULL(acctstoptime),'',acctterminatecause) AS acctterminatecause 
+               IF(ISNULL(acctstoptime),'',acctterminatecause) AS acctterminatecause
         FROM (SELECT * FROM radacct ORDER BY acctstarttime DESC) AS tmp
         GROUP BY callingstationid
         ORDER BY status ASC, acctstarttime DESC;
@@ -309,6 +319,33 @@ sub node_accounting_exist {
     $query->finish();
     return ($val);
 }
+
+=item accounting_framedip_exist
+
+Returns true if an accounting framedip exists and is active, undef or 0 otherwise.
+
+=cut
+sub node_accounting_framedip_exist {
+    my ($ip) = (@_);
+    my $query = db_query_execute(ACCOUNTING, $accounting_statements, 'acct_framedip_exist_sql', $ip) || return (0);
+    my ($val) = $query->fetchrow_hashref();
+    $query->finish();
+    return ($val);
+}
+
+=item accounting_framedip_nas
+
+Returns true if an accounting entry exists undef or 0 otherwise.
+
+=cut
+sub node_accounting_framedip_nas {
+    my ($ip) = (@_);
+    my $query = db_query_execute(ACCOUNTING, $accounting_statements, 'acct_framedip_nas_sql', $ip) || return (0);
+    my ($val) = $query->fetchrow_hashref();
+    $query->finish();
+    return ($val);
+}
+
 
 =item node_accounting_view - view latest accounting entry for a node, returns an array of hashrefs
 

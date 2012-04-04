@@ -138,6 +138,11 @@ sub supportsSaveConfig {
 =cut
 sub supportsRadiusDynamicVlanAssignment { return $TRUE; }
 
+=item supportsVPN
+
+=cut
+sub supportsVPN { return $FALSE; }
+
 sub new {
     my ( $class, %argv ) = @_;
     my $this = bless {

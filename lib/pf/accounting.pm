@@ -31,7 +31,7 @@ BEGIN {
         node_accounting_dynauth_attr
         node_accounting_exist
         node_accounting_framedip_exist
-        node_accounting_framedip_nas
+        node_accounting_nas
         node_accounting_view
         node_accounting_view_all
         node_accounting_daily_bw
@@ -99,8 +99,8 @@ sub accounting_db_prepare {
         SELECT COUNT(*) FROM radacct WHERE framedipaddress = ? AND acctstoptime IS NULL;
     ]);
 
-    $accounting_statements->{'acct_framedip_nas_sql'} = get_db_handle()->prepare(qq[
-        SELECT nasipaddress FROM radacct WHERE framedipaddress = ?;
+    $accounting_statements->{'acct_nas_sql'} = get_db_handle()->prepare(qq[
+        SELECT nasipaddress,username FROM radacct WHERE framedipaddress = ?;
     ]);
 
     $accounting_statements->{'acct_view_sql'} = get_db_handle()->prepare(qq[
@@ -333,14 +333,14 @@ sub node_accounting_framedip_exist {
     return ($val);
 }
 
-=item accounting_framedip_nas
+=item accounting_nas
 
 Returns true if an accounting entry exists undef or 0 otherwise.
 
 =cut
-sub node_accounting_framedip_nas {
+sub node_accounting_nas {
     my ($ip) = (@_);
-    my $query = db_query_execute(ACCOUNTING, $accounting_statements, 'acct_framedip_nas_sql', $ip) || return (0);
+    my $query = db_query_execute(ACCOUNTING, $accounting_statements, 'acct_nas_sql', $ip) || return (0);
     my ($val) = $query->fetchrow_hashref();
     $query->finish();
     return ($val);

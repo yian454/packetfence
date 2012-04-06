@@ -74,7 +74,8 @@ sub event_add {
 
   } elsif (node_accounting_framedip_exist($srcip)) {
     # Grab the associated NAS from accounting
-    my $nas_ip = node_accounting_framedip_nas($srcip);
+    my $acct = node_accounting_nas($srcip);
+    my $nas_ip = $acct->{'nasipaddress'};
     my $switch = pf::SwitchFactory->getInstance()->instantiate($nas_ip);
 
     # is switch object correct?
@@ -92,8 +93,9 @@ sub event_add {
     
     #Is the NAS a VPN concentrator?
     if ($switch->supportsVPN()) {
-       $logger->info("Performing VPN disconnection for $srcip on NAS $nas_ip");
-       # TODO: Add disconnect code here
+       $logger->info("Performing VPN disconnection for $srcip on NAS $nas_ip");       
+       $switch->disconnectVPN($acct->{'username'});
+       return (1);
     }
 
     #In any other case, we do nothing

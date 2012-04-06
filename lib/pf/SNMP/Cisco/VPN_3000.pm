@@ -22,6 +22,78 @@ use base ('pf::SNMP::Cisco');
 # CAPABILITIES
 sub supportsVPN() { return $TRUE; }
 
+sub disconnectVPN() {
+    my ($this,$username) = @_;
+    
+    #Check in the alActiveSessionUserName OIDs for every occurance of a username
+    my $logger = Log::Log4perl::get_logger( ref($this) );
+    my @oid_value;
+    my $oid_alActiveSessionRowStatus = '1.3.6.1.4.1.3076.2.1.2.17.2.1.1';
+    my $index = 1;
+
+    if ( !$this->isProductionMode() ) {
+        $logger->info(
+            "not in production mode ... we won't disconnect the user"
+        );
+        return 0;
+    }
+
+    my $rows = getActiveSessionUsername($username);
+
+    if ( !$this->connectWrite() ) {
+        return 0;
+    }
+
+    foreach my $oids { keys %{$rows} } (
+        if ($rows->{$oids} eq $username) {
+            push @oid_value, ($oid_alActiveSessionRowStatus.$index,Net::SNMP::INTEGER, $SNMP::DESTROY);
+        }
+        $index+=1;
+    )
+    
+    if (@oid_value) {
+        logger->trace("SNMP set_request for alActiveSessionRowStatus");
+        $result = $this->{_sessionWrite}->set_request(-varbindlist => \@oid_value);
+        if (!defined($result)) {
+            $logger->warn(
+                "SNMP error tyring to disconnect a user session on the VPN concentrator. "
+                . "Error message: ".$this->{_sessionWrite}->error()
+            );
+        }
+
+    } else {
+        $logger->info("Cannot find the proper index to disconnect the user, doing nothing");
+        return 0;
+    }
+
+    return 1;
+}
+
+sub getActiveSessionUsername() {
+    my ($this,$username) = @_;
+
+    #Check in the alActiveSessionUserName OIDs for every occurance of a username
+    my $logger = Log::Log4perl::get_logger( ref($this) );
+    my $oid_alActiveSessionUserName = '1.3.6.1.4.1.3076.2.1.2.17.2.1.3';
+    my $result = {};
+
+    if ( !$this->isProductionMode() ) {
+        $logger->info(
+            "not in production mode ... we won't disconnect the user"
+        );
+        return $result;
+    }
+
+    if ( !$this->connectRead() ) {
+        return $result;
+    }
+
+    $result = $this->{_sessionRead}
+            ->get_request( -baseoid => $oid_alActiveSessionUserName );
+    
+    return $result;
+}
+
 =head1 AUTHOR
 
 Olivier Bilodeau <obilodeau@inverse.ca>

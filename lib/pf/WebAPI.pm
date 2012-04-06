@@ -99,7 +99,7 @@ sub event_add {
     }
 
     #In any other case, we do nothing
-    $logger->info("violation on IP $srcip, connected to NAS $nas, with trigger ${type}::${id}: violation not added, the associated NAS is not a VPN concentrator!");
+    $logger->info("violation on IP $srcip, connected to NAS $nas_ip, with trigger ${type}::${id}: violation not added, the associated NAS is not a VPN concentrator!");
     return(0);
 
   } else {

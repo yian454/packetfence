@@ -44,16 +44,16 @@ sub disconnectVPN() {
         return 0;
     }
 
-    foreach my $oids { keys %{$rows} } (
+    foreach my $oids ( keys %{$rows} ) {
         if ($rows->{$oids} eq $username) {
             push @oid_value, ($oid_alActiveSessionRowStatus.$index,Net::SNMP::INTEGER, $SNMP::DESTROY);
         }
         $index+=1;
-    )
+    }
     
     if (@oid_value) {
         logger->trace("SNMP set_request for alActiveSessionRowStatus");
-        $result = $this->{_sessionWrite}->set_request(-varbindlist => \@oid_value);
+        my $result = $this->{_sessionWrite}->set_request(-varbindlist => \@oid_value);
         if (!defined($result)) {
             $logger->warn(
                 "SNMP error tyring to disconnect a user session on the VPN concentrator. "

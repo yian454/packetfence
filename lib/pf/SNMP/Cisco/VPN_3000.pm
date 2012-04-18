@@ -24,12 +24,12 @@ sub supportsVPN() { return $TRUE; }
 
 sub disconnectVPN() {
     my ($this,$username) = @_;
-    
+
     #Check in the alActiveSessionUserName OIDs for every occurance of a username
     my $logger = Log::Log4perl::get_logger( ref($this) );
     my @oid_value;
     my $oid_alActiveSessionRowStatus = '1.3.6.1.4.1.3076.2.1.2.17.2.1.1';
-    my $index = 1;
+    my $oid_alActiveSessionUserName = '1.3.6.1.4.1.3076.2.1.2.17.2.1.3';
 
     if ( !$this->isProductionMode() ) {
         $logger->info(
@@ -38,7 +38,7 @@ sub disconnectVPN() {
         return 0;
     }
 
-    my $rows = getActiveSessionUsername($username);
+    my $rows = $this->getActiveSessionUsername($username);
 
     if ( !$this->connectWrite() ) {
         return 0;
@@ -46,13 +46,13 @@ sub disconnectVPN() {
 
     foreach my $oids ( keys %{$rows} ) {
         if ($rows->{$oids} eq $username) {
-            push @oid_value, ($oid_alActiveSessionRowStatus.$index,Net::SNMP::INTEGER, $SNMP::DESTROY);
+            $oids =~ /^$oid_alActiveSessionUserName\.(\d+)$/;
+            push @oid_value, ($oid_alActiveSessionRowStatus . "." . $1,Net::SNMP::INTEGER, $SNMP::DESTROY);
         }
-        $index+=1;
     }
     
     if (@oid_value) {
-        logger->trace("SNMP set_request for alActiveSessionRowStatus");
+        $logger->trace("SNMP set_request for alActiveSessionRowStatus");
         my $result = $this->{_sessionWrite}->set_request(-varbindlist => \@oid_value);
         if (!defined($result)) {
             $logger->warn(
@@ -88,9 +88,8 @@ sub getActiveSessionUsername() {
         return $result;
     }
 
-    $result = $this->{_sessionRead}
-            ->get_request( -baseoid => $oid_alActiveSessionUserName );
-    
+    $result = $this->{_sessionRead}->get_table( -baseoid => $oid_alActiveSessionUserName );
+
     return $result;
 }
 

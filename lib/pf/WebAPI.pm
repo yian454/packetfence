@@ -54,7 +54,7 @@ PFAPI - Web Services handler exposing PacketFence features
 
 use pf::config;
 use pf::iplog;
-use pf::accounting;
+use pf::accounting qw(node_accounting_framedip_exist node_accounting_nas);
 use pf::radius::custom $RADIUS_API_LEVEL;
 use pf::violation;
 use pf::soh::custom $SOH_API_LEVEL;
@@ -67,6 +67,7 @@ sub event_add {
 
   # fetch IP associated to MAC
   my $srcmac = ip2mac($srcip);
+  
   if ($srcmac) {
 
     # trigger a violation
@@ -76,6 +77,8 @@ sub event_add {
     # Grab the associated NAS from accounting
     my $acct = node_accounting_nas($srcip);
     my $nas_ip = $acct->{'nasipaddress'};
+    $logger->info("The IP is tied with an active accounting session on NAS $nas_ip, we will terminate the session");
+    $logger->info("Username is $acct->{'username'}");
     my $switch = pf::SwitchFactory->getInstance()->instantiate($nas_ip);
 
     # is switch object correct?

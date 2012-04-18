@@ -100,7 +100,7 @@ sub accounting_db_prepare {
     ]);
 
     $accounting_statements->{'acct_nas_sql'} = get_db_handle()->prepare(qq[
-        SELECT nasipaddress,username FROM radacct WHERE framedipaddress = ?;
+        SELECT nasipaddress,username FROM radacct WHERE framedipaddress = ? AND acctstoptime IS NULL;
     ]);
 
     $accounting_statements->{'acct_view_sql'} = get_db_handle()->prepare(qq[
@@ -328,7 +328,7 @@ Returns true if an accounting framedip exists and is active, undef or 0 otherwis
 sub node_accounting_framedip_exist {
     my ($ip) = (@_);
     my $query = db_query_execute(ACCOUNTING, $accounting_statements, 'acct_framedip_exist_sql', $ip) || return (0);
-    my ($val) = $query->fetchrow_hashref();
+    my ($val) = $query->fetchrow_array();
     $query->finish();
     return ($val);
 }

@@ -153,6 +153,11 @@ sub generate_release_page {
         -Content_length => length($html_txt),
         -Connection     => 'Close'
     );
+    
+    # Flush the session
+    $session->delete();
+    $session->flush();
+
     if ($r) { print $r->print($html_txt); }
     else    { print STDOUT $html_txt; }
 }
@@ -211,6 +216,10 @@ sub generate_mobileconfig_provisioning_page {
 
     my $cookie = $cgi->cookie( CGISESSID => $session->id );
     print $cgi->header( -cookie => $cookie );
+
+    # Flush the session
+    $session->delete();
+    $session->flush();
 
     my $template = Template->new( { INCLUDE_PATH => [$CAPTIVE_PORTAL{'TEMPLATE_DIR'}], } );
     $template->process( "release_with_xmlconfig.html", $vars ) || $logger->error($template->error());

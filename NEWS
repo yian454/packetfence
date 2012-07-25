@@ -22,6 +22,7 @@ Enhancements
  * general.caching parameter removed from configuration
  * major refactoring, cleanup and dependencies removal
  * node.expire now works for VLAN/Inline mode (#1481)
+ * Delete and Flush CGI Session when leaving the portal
 
 --------------------------------------------------------------------------------
 Version <stable-version> released on <releaseDate>

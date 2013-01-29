@@ -8,15 +8,15 @@ pf::config - PacketFence configuration
 
 =head1 DESCRIPTION
 
-pf::config contains the code necessary to read and manipulate the 
+pf::config contains the code necessary to read and manipulate the
 PacketFence configuration files.
 
-It automatically imports gazillions of globals into your namespace. You 
+It automatically imports gazillions of globals into your namespace. You
 have been warned.
 
 =head1 CONFIGURATION AND ENVIRONMENT
 
-Read the following configuration files: F<log.conf>, F<pf.conf>, 
+Read the following configuration files: F<log.conf>, F<pf.conf>,
 F<pf.conf.defaults>, F<networks.conf>, F<dhcp_fingerprints.conf>, F<oui.txt>, F<floating_network_device.conf>, F<oauth2-ips.conf>.
 
 =cut
@@ -41,18 +41,18 @@ our (
     $install_dir, $bin_dir, $conf_dir, $lib_dir, $log_dir, $generated_conf_dir, $var_dir,
     @listen_ints, @dhcplistener_ints, @ha_ints, $monitor_int,
     @internal_nets, @routed_isolation_nets, @routed_registration_nets, @inline_nets, @external_nets,
-    @inline_enforcement_nets, @vlan_enforcement_nets, $management_network, 
+    @inline_enforcement_nets, @vlan_enforcement_nets, $management_network,
     %guest_self_registration,
-    $default_config_file, %Default_Config, 
-    $config_file, %Config, 
-    $network_config_file, %ConfigNetworks, %ConfigOAuth, $oauth_ip_file, 
+    $default_config_file, %Default_Config,
+    $config_file, %Config,
+    $network_config_file, %ConfigNetworks, %ConfigOAuth, $oauth_ip_file,
     $dhcp_fingerprints_file, $dhcp_fingerprints_url,
     $oui_file, $oui_url,
     $floating_devices_file, %ConfigFloatingDevices,
     %connection_type, %connection_type_to_str, %connection_type_explained,
     %mark_type_to_str, %mark_type,
     $blackholemac, $portscan_sid, $thread, $default_pid, $fqdn,
-    %CAPTIVE_PORTAL
+    %CAPTIVE_PORTAL, $allowed_gaming_oui_file, $allowed_gaming_console_types_file
 );
 
 BEGIN {
@@ -62,7 +62,7 @@ BEGIN {
     # Categorized by feature, pay attention when modifying
     @EXPORT = qw(
         $install_dir $bin_dir $conf_dir $lib_dir $generated_conf_dir $var_dir $log_dir
-        @listen_ints @dhcplistener_ints @ha_ints $monitor_int 
+        @listen_ints @dhcplistener_ints @ha_ints $monitor_int
         @internal_nets @routed_isolation_nets @routed_registration_nets @inline_nets $management_network @external_nets
         @inline_enforcement_nets @vlan_enforcement_nets
         %guest_self_registration
@@ -72,7 +72,7 @@ BEGIN {
         $default_config_file %Default_Config
         $config_file %Config
         $network_config_file %ConfigNetworks %ConfigOAuth
-        $dhcp_fingerprints_file $dhcp_fingerprints_url 
+        $dhcp_fingerprints_file $dhcp_fingerprints_url
         $oui_file $oui_url
         $floating_devices_file %ConfigFloatingDevices
         $blackholemac $portscan_sid $WIPS_VID @VALID_TRIGGER_TYPES $thread $default_pid $fqdn
@@ -93,6 +93,7 @@ BEGIN {
         is_in_list
         $LOG4PERL_RELOAD_TIMER
         load_config
+        $allowed_gaming_oui_file $allowed_gaming_console_types_file
     );
 }
 
@@ -121,18 +122,20 @@ Readonly::Scalar our $TRUE => 1;
 Readonly::Scalar our $YES => 'yes';
 Readonly::Scalar our $NO => 'no';
 
-$config_file            = $conf_dir . "/pf.conf";
-$default_config_file    = $conf_dir . "/pf.conf.defaults";
-$network_config_file    = $conf_dir . "/networks.conf";
-$dhcp_fingerprints_file = $conf_dir . "/dhcp_fingerprints.conf";
-$oui_file               = $conf_dir . "/oui.txt";
-$floating_devices_file  = $conf_dir . "/floating_network_device.conf";
-$oauth_ip_file          = $conf_dir . "/oauth2-ips.conf";
+$config_file             = $conf_dir . "/pf.conf";
+$default_config_file     = $conf_dir . "/pf.conf.defaults";
+$network_config_file     = $conf_dir . "/networks.conf";
+$dhcp_fingerprints_file  = $conf_dir . "/dhcp_fingerprints.conf";
+$oui_file                = $conf_dir . "/oui.txt";
+$floating_devices_file   = $conf_dir . "/floating_network_device.conf";
+$oauth_ip_file           = $conf_dir . "/oauth2-ips.conf";
+$allowed_gaming_oui_file = $conf_dir . "/allowed-gaming-oui.txt";
+$allowed_gaming_console_types_file = $conf_dir . "/allowed-gaming-console_types.txt";
 
 $oui_url               = 'http://standards.ieee.org/regauth/oui/oui.txt';
 $dhcp_fingerprints_url = 'http://www.packetfence.org/dhcp_fingerprints.conf';
 
-Readonly our @VALID_TRIGGER_TYPES => ( "accounting", "detect", "internal", "mac", "nessus", "openvas", "os", "soh", "useragent", 
+Readonly our @VALID_TRIGGER_TYPES => ( "accounting", "detect", "internal", "mac", "nessus", "openvas", "os", "soh", "useragent",
         "vendormac" );
 
 $portscan_sid = 1200003;
@@ -297,7 +300,7 @@ try {
 
 Load configuration. Can be used to reload it too.
 
-WARNING: This has been recently introduced and was not tested with our 
+WARNING: This has been recently introduced and was not tested with our
 multi-threaded daemons.
 
 =cut
@@ -385,7 +388,7 @@ sub readPfConfigFiles {
         "registration.skip_window",   "registration.skip_reminder",
         "registration.expire_window", "registration.expire_session",
         "general.maintenance_interval", "scan.duration",
-        "vlan.bounce_duration",   
+        "vlan.bounce_duration",
         "guests_self_registration.email_activation_timeout", "guests_self_registration.access_duration",
         "guests_admin_registration.default_access_duration",
     ) {
@@ -495,7 +498,7 @@ sub readPfConfigFiles {
     # check for portal profile guest self registration options in case they're disabled in default profile
     foreach my $portalprofile ( tied(%Config)->GroupMembers("portal-profile") ) {
         # marking guest_self_registration as globally enabled if needed by one of the portal profiles
-        if ( (defined($Config{$portalprofile}{'guest_self_reg'})) && 
+        if ( (defined($Config{$portalprofile}{'guest_self_reg'})) &&
              ($Config{$portalprofile}{'guest_self_reg'} =~ /^\s*(y|yes|true|enable|enabled|1)\s*$/i) ) {
             $guest_self_registration{'enabled'} = $TRUE;
         }
@@ -535,7 +538,7 @@ sub readNetworkConfigFile {
     my @errors = @Config::IniFiles::errors;
     if ( scalar(@errors) ) {
         $logger->logcroak( join( "\n", @errors ) );
-    }   
+    }
 
     #remove trailing spaces..
     foreach my $section ( tied(%ConfigNetworks)->Sections ) {
@@ -580,7 +583,7 @@ sub readFloatingNetworkDeviceFile {
     }
 
     #remove trailing spaces..
-    foreach my $section ( tied(%ConfigFloatingDevices)->Sections ) {   
+    foreach my $section ( tied(%ConfigFloatingDevices)->Sections ) {
         foreach my $key ( keys %{ $ConfigFloatingDevices{$section} } ) {
             if ($key eq 'trunkPort') {
                 if ($ConfigFloatingDevices{$section}{$key} =~ /^\s*(y|yes|true|enabled|1)\s*$/i) {
@@ -604,14 +607,14 @@ sub readOAuthFile {
     if ( scalar(@errors) ) {
         $logger->logcroak( join( "\n", @errors ) );
     }
-    
+
     #Remove Spaces
     foreach my $section ( tied(%ConfigOAuth)->Sections ) {
         foreach my $key ( keys %{ $ConfigOAuth{$section} } ) {
             $ConfigOAuth{$section}{$key} =~ s/\s+$//;
         }
     }
-} 
+}
 
 =item normalize_time - formats date
 
@@ -700,7 +703,7 @@ Returns undef on unrecognized types.
 sub get_network_type {
     my ($network) = @_;
 
-    
+
     if (!defined($ConfigNetworks{$network}{'type'})) {
         # not defined
         return;
@@ -859,7 +862,7 @@ sub _load_captive_portal {
     }
 
     # process pf.conf's parameter into an IP => 1 hash
-    %{$CAPTIVE_PORTAL{'loadbalancers_ip'}} = 
+    %{$CAPTIVE_PORTAL{'loadbalancers_ip'}} =
         map { $_ => $TRUE } split(/\s*,\s*/, $Config{'captive_portal'}{'loadbalancers_ip'})
     ;
 }

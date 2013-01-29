@@ -9,15 +9,15 @@ pf::web - module to generate the different web pages.
 =head1 DESCRIPTION
 
 pf::web contains the functions necessary to generate different web pages:
-based on pre-defined templates: login, registration, release, error, status.  
+based on pre-defined templates: login, registration, release, error, status.
 
 It is possible to customize the behavior of this module by redefining its subs in pf::web::custom.
 See F<pf::web::custom> for details.
 
 =head1 CONFIGURATION AND ENVIRONMENT
 
-Read the following template files: F<release.html>, 
-F<login.html>, F<enabler.html>, F<error.html>, F<status.html>, 
+Read the following template files: F<release.html>,
+F<login.html>, F<enabler.html>, F<error.html>, F<status.html>,
 F<register.html>.
 
 =cut
@@ -53,8 +53,8 @@ use pf::os qw(dhcp_fingerprint_view);
 use pf::useragent;
 use pf::util;
 use pf::violation qw(violation_count);
-use pf::web::auth; 
-use pf::web::constants; 
+use pf::web::auth;
+use pf::web::constants;
 
 Readonly our $LOGIN_TEMPLATE => 'login.html';
 
@@ -133,8 +133,8 @@ sub render_template {
     }
 
     $logger->debug("rendering template named $template");
-    my $tt = Template->new({ 
-        INCLUDE_PATH => [$CAPTIVE_PORTAL{'TEMPLATE_DIR'} . $portalSession->getProfile->getTemplatePath], 
+    my $tt = Template->new({
+        INCLUDE_PATH => [$CAPTIVE_PORTAL{'TEMPLATE_DIR'} . $portalSession->getProfile->getTemplatePath],
     });
     $tt->process( $template, $portalSession->stash, $r ) || do {
         $logger->error($tt->error());
@@ -182,7 +182,7 @@ sub generate_release_page {
 
 =item supports_mobileconfig_provisioning
 
-Validating that the node supports mobile configuration provisioning, that it's configured 
+Validating that the node supports mobile configuration provisioning, that it's configured
 and that the node's category matches the configuration.
 
 =cut
@@ -196,7 +196,7 @@ sub supports_mobileconfig_provisioning {
     # TODO get rid of hardcoded targets like that
     my $node_attributes = node_attributes($portalSession->getClientMac);
     my @fingerprint = dhcp_fingerprint_view($node_attributes->{'dhcp_fingerprint'});
-    return $FALSE if (!defined($fingerprint[0]->{'os'}) || $fingerprint[0]->{'os'} !~ /Apple iPod, iPhone or iPad/); 
+    return $FALSE if (!defined($fingerprint[0]->{'os'}) || $fingerprint[0]->{'os'} !~ /Apple iPod, iPhone or iPad/);
 
     # do we perform provisioning for this category?
     my $config_category = $Config{'provisioning'}{'category'};
@@ -270,8 +270,8 @@ sub generate_login_page {
     my ( $portalSession, $err ) = @_;
 
     #Signup link activated if self_reg is enabled AND we have at least 1 proper mode activated
-    if (isenabled($portalSession->getProfile->getGuestSelfReg) && 
-       ( is_in_list($SELFREG_MODE_EMAIL, $portalSession->getProfile->getGuestModes) || 
+    if (isenabled($portalSession->getProfile->getGuestSelfReg) &&
+       ( is_in_list($SELFREG_MODE_EMAIL, $portalSession->getProfile->getGuestModes) ||
          is_in_list($SELFREG_MODE_SMS, $portalSession->getProfile->getGuestModes) ||
          is_in_list($SELFREG_MODE_SPONSOR, $portalSession->getProfile->getGuestModes) ) ) {
         $portalSession->stash->{'guest_allowed'} = 1;
@@ -377,7 +377,7 @@ sub generate_oauth2_result {
    eval {
       $token = oauth2_client($provider)->get_access_token($portalSession->getCgi()->url_param('code'));
    };
-   
+
    if ($@) {
        $logger->info("OAuth2: failed to receive the token from the provider, redireting to login page");
        generate_login_page( $portalSession, i18n("OAuth2 Error: Failed to get the token") );
@@ -388,7 +388,7 @@ sub generate_oauth2_result {
 
    # Validate the token
    $response = $token->get($Config{"oauth2 $provider"}{'protected_resource_url'});
-   
+
    if ($response->is_success) {
         # Grab JSON content
         my $json = new JSON;
@@ -419,16 +419,18 @@ sub web_node_register {
 
     # FIXME quick and hackish fix for #1505. A proper, more intrusive, API changing, fix should hit devel.
     my $mac;
-    if (defined($portalSession->getGuestNodeMac)) {
-        $mac = $portalSession->getGuestNodeMac;
+    if(exists $info{'mac'} && defined $info{'mac'})  {
+        $mac = $info{'mac'};
     }
-    else {
+    elsif (defined($portalSession->getGuestNodeMac)) {
+        $mac = $portalSession->getGuestNodeMac;
+    } else {
         $mac = $portalSession->getClientMac;
     }
 
     if ( is_max_reg_nodes_reached($mac, $pid, $info{'category'}) ) {
         pf::web::generate_error_page(
-            $portalSession, 
+            $portalSession,
             i18n("You have reached the maximum number of devices you are able to register with this username.")
         );
         exit(0);
@@ -460,7 +462,7 @@ Records User-Agent for the provided node and triggers violations.
 sub web_node_record_user_agent {
     my ( $mac, $user_agent ) = @_;
     my $logger = Log::Log4perl::get_logger('pf::web');
-    
+
     # caching useragents, if it's the same don't bother triggering violations
     my $cached_useragent = $main::useragent_cache->get($mac);
 
@@ -527,7 +529,7 @@ sub web_user_authenticate {
     return (0, undef) if (!defined($authenticator));
 
     # validate login and password
-    my $return = $authenticator->authenticate( 
+    my $return = $authenticator->authenticate(
         $portalSession->cgi->param("username"),
         $portalSession->cgi->param("password")
     );
@@ -599,8 +601,8 @@ sub generate_pending_page {
 
 =item end_portal_session
 
-Call after you made your changes to the user / node. 
-This takes care of handling violations, bouncing back to http for portal 
+Call after you made your changes to the user / node.
+This takes care of handling violations, bouncing back to http for portal
 network access detection or handling mobile provisionning.
 
 This was done in several different locations making maintenance more difficult than it should.
@@ -636,7 +638,7 @@ sub end_portal_session {
             .'/access?destination_url=' . uri_escape($destination_url)
         );
         exit(0);
-    } 
+    }
 
     pf::web::generate_release_page($portalSession);
     exit(0);
@@ -658,8 +660,8 @@ sub generate_generic_page {
 
 sub oauth2_client {
       my $provider = shift;
-      
-      
+
+
 
       Net::OAuth2::Client->new(
                 $Config{"oauth2 $provider"}{'client_id'},

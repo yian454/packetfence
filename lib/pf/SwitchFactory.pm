@@ -41,6 +41,10 @@ $switches_cached_config  = pf::config::cached->new(
                     my $value = $switch->{$key} || "";
                     $switch->{$key} = [split /\s*,\s*/,$value ];
                 }
+                # transforming cluster_ips to arrayref
+                my $value = $switch->{cluster_ips} || "";
+                $switch->{cluster_ips} = [split /\s*,\s*/,$value ];
+
                 # transforming vlans and roles to hashes
                 my %merged = ( Vlan => {}, Role => {});
                 foreach my $key ( grep { /(Vlan|Role)$/ } keys %{$switch}) {

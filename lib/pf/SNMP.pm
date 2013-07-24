@@ -244,6 +244,7 @@ sub new {
         '_roles'                    => undef,
         '_inlineTrigger'            => undef,
         '_deauthMethod'             => undef,
+        '_cluster_ips'              => undef,
     }, $class;
 
     foreach ( keys %argv ) {
@@ -327,6 +328,8 @@ sub new {
             $this->{_inlineTrigger} = $argv{$_};
         } elsif (/^-?deauthMethod$/i) {
             $this->{_deauthMethod} = $argv{$_};
+        } elsif (/^-?cluster_ips$/i) {
+            $this->{_cluster_ips} = $argv{$_};
         }
         # customVlan members are now dynamically generated. 0 to 99 supported.
         elsif (/^-?(\w+)Vlan$/i) {

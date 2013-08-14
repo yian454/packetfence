@@ -26,7 +26,7 @@ Options:
   --ou=OU                               Required: The Organizational Unit
   --attribute NAME VALUE                Optional: Additional attribute to add to the entry can be called multiple times
                                           ex: --attribute name1 value1 --attribute name2 value2
-  --help                                Will show this
+  --help                                Will show help
 
 =cut
 

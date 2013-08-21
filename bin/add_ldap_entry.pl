@@ -15,18 +15,20 @@ add_ldap_entry.pl [OPTIONS]
 
 Options:
 
-  --server=SERVER                       Required: The ldap server accepts either the server name or an ldap uri
+  --server SERVER                       Required: The ldap server accepts either the server name or an ldap uri
                                         ldapserver.domain.tld, ldaps://127.0.0.1:636, ldap://127.0.0.1:389
-  --user=USER                           The full distinguished name for the user ex "CN=tests,DC=inverse,DC=local"
-  --password=PASSWORD                   Optional: The password for the user. This option or passwordfile must be set
-  --password-file=PASSWORDFILE          Optional: A file that contains the user password. This option or password must be set
+  --user USER                           The full distinguished name for the user ex "CN=tests,DC=inverse,DC=local"
+  --password PASSWORD                   Optional: The password for the user. This option or passwordfile must be set
+  --password-file PASSWORDFILE          Optional: A file that contains the user password. This option or password must be set
   --object-class OBJECT [OBJECT ...]    Optional: The list of the objectclass for the entry. Default: top person user organizationalPerson
                                           ex: --object-class top person user organizationalPerson
-  --cn=COMMONNAME                       Required: The common name of the entry
-  --ou=OU                               Required: The Organizational Unit
+  --cn COMMONNAME                       Required: The common name of the entry
+  --ou OU                               Required: The Organizational Unit
+  --new-user-password PASSWORD          Optional: The new users' pasword: default to the cn
   --attribute NAME VALUE                Optional: Additional attribute to add to the entry can be called multiple times
                                           ex: --attribute name1 value1 --attribute name2 value2
-  --userAccountControl NUMBER           The permission for the users
+  --userAccountControl NUMBER           Optional: The permission for the users
+  --group GROUP [GROUP ...]             Optional: The group to add the user into can be called multiple times
   --help                                Will show help
 
 =cut
@@ -42,9 +44,9 @@ use List::MoreUtils qw(notall natatime);
 use Encode qw(encode);
 use Unicode::String qw(utf8);
 
-my ($user,$passwordfile,$password,$server,$cn,$ou,$help,$userAccountControl);
+my ($user,$passwordfile,$password,$server,$cn,$ou,$help,$userAccountControl,$new_user_password);
 my @object_class = (qw(top person user organizationalPerson));
-my @attributes;
+my (@attributes,@groups);
 
 GetOptions (
     "user=s" => \$user,    # numeric
@@ -54,8 +56,10 @@ GetOptions (
     "object-class=s{1,}" => \@object_class,
     "cn=s" => \$cn,
     "ou=s" => \$ou,
+    "new-user-password=s" => \$new_user_password,
     "userAccountControl=i" => \$userAccountControl,
     "attribute=s{2}" => \@attributes,
+    "group=s{1,}" => \@groups,
     "help|h" => \$help,
 ) || die pod2usage(2);
 
@@ -92,7 +96,6 @@ my @attrs = (
    objectClass => \@object_class,
    cn => $cn,
    @attributes
-#   macAddress => '00:01:02:03:04:06'
  );
 
 my $dn = "cn=$cn,$ou";
@@ -103,9 +106,9 @@ if($result->is_error) {
     exit 1;
 }
 
-my $newuserpasswd = $cn;
+$new_user_password = $cn unless defined $new_user_password;
 
-$result = $ldap->modify ( $dn, replace => ['unicodePwd',utf8(chr(34).$newuserpasswd.chr(34))->utf16le()] );
+$result = $ldap->modify ( $dn, replace => ['unicodePwd',utf8(chr(34) . $new_user_password  . chr(34))->utf16le()] );
 if($result->is_error) {
     print STDERR "Cannot modify entry $dn\n";
     print STDERR "Error: ",$result->error,"\n";
@@ -118,6 +121,14 @@ if(defined $userAccountControl) {
         print STDERR "Cannot set userAccountControl $dn\n";
         print STDERR "Error: ",$result->error,"\n";
         exit 1;
+    }
+}
+
+foreach my $group (@groups) {
+    $result = $ldap->modify ( $group, add => [member => $dn] );
+    if($result->is_error) {
+        print STDERR "Cannot add user $dn to group $group\n";
+        print STDERR "Error: ",$result->error,"\n";
     }
 }
 

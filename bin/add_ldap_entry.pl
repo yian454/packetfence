@@ -26,6 +26,7 @@ Options:
   --ou=OU                               Required: The Organizational Unit
   --attribute NAME VALUE                Optional: Additional attribute to add to the entry can be called multiple times
                                           ex: --attribute name1 value1 --attribute name2 value2
+  --userAccountControl NUMBER           The permission for the users
   --help                                Will show help
 
 =cut
@@ -37,9 +38,11 @@ use Net::LDAP::Util qw(escape_dn_value);
 use File::Slurp;
 use Getopt::Long;
 use Pod::Usage qw(pod2usage);
-use List::MoreUtils qw(notall);
+use List::MoreUtils qw(notall natatime);
+use Encode qw(encode);
+use Unicode::String qw(utf8);
 
-my ($user,$passwordfile,$password,$server,$cn,$ou,$help);
+my ($user,$passwordfile,$password,$server,$cn,$ou,$help,$userAccountControl);
 my @object_class = (qw(top person user organizationalPerson));
 my @attributes;
 
@@ -51,6 +54,7 @@ GetOptions (
     "object-class=s{1,}" => \@object_class,
     "cn=s" => \$cn,
     "ou=s" => \$ou,
+    "userAccountControl=i" => \$userAccountControl,
     "attribute=s{2}" => \@attributes,
     "help|h" => \$help,
 ) || die pod2usage(2);
@@ -62,15 +66,27 @@ if($help) {
 chomp ($password = read_file($passwordfile)) if $passwordfile;
 
 if( notall {defined $_ }  ($user, $password, $server, $cn, $ou)    ) {
-    die pod2usage("The following options be passed:  user, server, cn, ou and either password or passwordfile");
+    die pod2usage("The following options must be passed:  user, server, cn, ou and either password or passwordfile");
 }
+
 
 $cn = escape_dn_value($cn);
 
-my $ldap = Net::LDAP->new ( $server ) || die "cannot create an ldap object\n";
-my $result = $ldap->bind (
+my $ldap = Net::LDAP->new ( $server, version =>3 ) || die "cannot create an ldap object\n";
+my $result = $ldap->start_tls;
+if($result->is_error) {
+    print STDERR "Cannot start tls $server\n";
+    print STDERR "Error: ",$result->error,"\n";
+    exit 1;
+}
+$result = $ldap->bind (
     $user , password => $password,
-    version => 3 )  || die "cannot bind to $server \n";
+    version => 3 );
+if($result->is_error) {
+    print STDERR "Cannot bind to $server\n";
+    print STDERR "Error: ",$result->error,"\n";
+    exit 1;
+}
 
 my @attrs = (
    objectClass => \@object_class,
@@ -85,6 +101,24 @@ if($result->is_error) {
     print STDERR "Cannot add new entry $dn\n";
     print STDERR "Error: ",$result->error,"\n";
     exit 1;
+}
+
+my $newuserpasswd = $cn;
+
+$result = $ldap->modify ( $dn, replace => ['unicodePwd',utf8(chr(34).$newuserpasswd.chr(34))->utf16le()] );
+if($result->is_error) {
+    print STDERR "Cannot modify entry $dn\n";
+    print STDERR "Error: ",$result->error,"\n";
+    exit 1;
+}
+
+if(defined $userAccountControl) {
+    $result = $ldap->modify ( $dn, replace => ['userAccountControl',$userAccountControl] );
+    if($result->is_error) {
+        print STDERR "Cannot set userAccountControl $dn\n";
+        print STDERR "Error: ",$result->error,"\n";
+        exit 1;
+    }
 }
 
 =head1 AUTHOR

@@ -238,6 +238,7 @@ sub new {
         '_wsTransport'              => undef,
         '_radiusSecret'             => undef,
         '_controllerIp'             => undef,
+        '_controllerPort'           => undef,
         '_uplink'                   => undef,
         '_vlans'                    => undef,
         '_VoIPEnabled'              => undef,
@@ -310,6 +311,8 @@ sub new {
             $this->{_radiusSecret} = $argv{$_};
         } elsif (/^-?controllerIp$/i) {
             $this->{_controllerIp} = $argv{$_}? lc($argv{$_}) : undef;
+        } elsif (/^-?controllerPort$/i) {
+            $this->{_controllerPort} = $argv{$_};
         } elsif (/^-?uplink$/i) {
             $this->{_uplink} = $argv{$_};
         } elsif (/^-?SNMPEngineID$/i) {
@@ -432,16 +435,18 @@ It performs a write test to make sure that the write actually works.
 =cut
 
 sub connectWriteTo {
-    my ($this, $ip, $sessionKey) = @_;
+    my ($this, $ip, $sessionKey,$port) = @_;
     my $logger = Log::Log4perl::get_logger( ref($this) );
 
     # if connection already exists, no need to connect again
     return 1 if ( defined( $this->{$sessionKey} ) );
+    $port ||= 161;
 
     $logger->debug( "opening SNMP v" . $this->{_SNMPVersion} . " write connection to $ip" );
     if ( $this->{_SNMPVersion} eq '3' ) {
         ( $this->{$sessionKey}, $this->{_error} ) = Net::SNMP->session(
             -hostname     => $ip,
+            -port         => $port,
             -version      => $this->{_SNMPVersion},
             -timeout      => 2,
             -retries      => 1,
@@ -454,6 +459,7 @@ sub connectWriteTo {
     } else {
         ( $this->{$sessionKey}, $this->{_error} ) = Net::SNMP->session(
             -hostname  => $ip,
+            -port      => $port,
             -version   => $this->{_SNMPVersion},
             -timeout   => 2,
             -retries   => 1,
@@ -511,7 +517,7 @@ Uses connectWriteTo with IP from configuration internally.
 
 sub connectWrite {
     my $this   = shift;
-    return $this->connectWriteTo($this->{_ip}, '_sessionWrite');
+    return $this->connectWriteTo($this->{_ip}, '_sessionWrite',$this->{_controllerPort});
 }
 
 =item connectWriteToController
@@ -522,7 +528,7 @@ Establishes an SNMP write connection to the controller of the network device as 
 
 sub connectWriteToController {
     my $this   = shift;
-    return $this->connectWriteTo($this->{_controllerIp}, '_sessionControllerWrite');
+    return $this->connectWriteTo($this->{_controllerIp}, '_sessionControllerWrite',$this->{_controllerPort});
 }
 
 =item disconnectWriteTo
@@ -2704,7 +2710,7 @@ Default implementation.
 =cut
 
 sub returnRadiusAccessAccept {
-    my ($self, $vlan, $mac, $port, $connection_type, $user_name, $ssid, $wasInline) = @_;
+    my ($self, $vlan, $mac, $port, $connection_type, $user_name, $ssid, $wasInline, $user_role) = @_;
     my $logger = Log::Log4perl::get_logger( ref($self) );
 
     # Inline Vs. VLAN enforcement
@@ -2722,9 +2728,11 @@ sub returnRadiusAccessAccept {
     try {
         if ($self->supportsRoleBasedEnforcement()) {
             $logger->debug("network device supports roles. Evaluating role to be returned");
-            my $roleResolver = pf::roles::custom->instance();
-            my $role = $roleResolver->getRoleForNode($mac, $self);
-            if (defined($role)) {
+            my $role = "";
+            if ( defined($user_role) && $user_role ne "" ) {
+                $role = $self->getRoleByName($user_role);
+            }
+            if ( defined($role) && $role ne "" ) {
                 $radius_reply_ref->{$self->returnRoleAttribute()} = $role;
                 $logger->info(
                     "Added role $role to the returned RADIUS Access-Accept under attribute " . $self->returnRoleAttribute()
@@ -2756,9 +2764,9 @@ Return the reference to the deauth technique or the default deauth technique.
 sub deauthTechniques {
     my ($this, $method) = @_;
     my $logger = Log::Log4perl::get_logger( ref($this) );
-    my $default = $SNMP::DEFAULT;
+    my $default = $SNMP::SNMP;
     my %tech = (
-        $SNMP::DEFAULT => \&deauthenticateMacDefault,
+        $SNMP::SNMP => \&deauthenticateMacDefault,
     );
 
     if (!defined($method) || !defined($tech{$method})) {
@@ -2794,6 +2802,17 @@ sub deauthenticateMacDefault {
 
     $logger->warn("Unimplemented! First, make sure your configuration is ok. "
         . "If it is then we don't support your hardware. Open a bug report with your hardware type.");
+    return $FALSE;
+}
+
+=item GetIfIndexByNasPortId
+
+return IfIndexByNasPortId
+
+=cut
+
+sub getIfIndexByNasPortId {
+    my ($this ) = @_;
     return $FALSE;
 }
 

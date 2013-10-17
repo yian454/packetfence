@@ -62,7 +62,7 @@ $info{'user_agent'} = $cgi->user_agent;
 my $no_password_needed = any {$_ eq 'null' } @{$portalSession->getProfile->getGuestModes};
 my $no_username_needed = pf::web::_no_username($portalSession);
 
-if ( (defined($cgi->param('username') ) || $no_username_needed ) && ($cgi->param('username') ne '' || $no_password_needed )) {
+if ( !defined($cgi->param('mode')) && (defined($cgi->param('username') ) || $no_username_needed ) && ($cgi->param('username') ne '' || $no_password_needed )) {
 
   my ($form_return, $err) = pf::web::validate_form($portalSession);
   if ($form_return != 1) {

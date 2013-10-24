@@ -24,7 +24,6 @@ use pf::util;
 use pf::services;
 use pf::trigger;
 use NetAddr::IP;
-use File::Slurp qw(read_file);
 
 use lib $conf_dir;
 
@@ -470,7 +469,7 @@ If some interfaces are configured to run in inline enforcement then these tests 
 
 sub inline {
 
-    my $result = read_file("/proc/sys/net/ipv4/ip_forward");
+    my $result = pf_run("cat /proc/sys/net/ipv4/ip_forward");
     if ($result ne "1\n") {
         add_problem( $WARN,
             "inline mode needs ip_forward enabled to work properly. " .
@@ -812,7 +811,7 @@ sub switches {
                 add_problem( $WARN, "switches.conf | Switch type ($type) is invalid for switch $section" );
             }
         # check for valid switch IP
-        if ( !valid_ip($section) ) {
+        unless ( valid_mac_or_ip($section) ) {
             add_problem( $WARN, "switches.conf | Switch IP is invalid for switch $section" );
         }
 

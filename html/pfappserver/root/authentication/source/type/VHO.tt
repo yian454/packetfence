@@ -1,1 +1,1 @@
-[% INCLUDE "authentication/source/type/VHO.tt" %]
+[% INCLUDE "authentication/source/type/RADIUS.tt" %]

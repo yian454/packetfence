@@ -74,6 +74,7 @@ use constant INSTALL_DIR => '/usr/local/pf';
 use lib INSTALL_DIR . "/lib";
 
 use pf::config;
+use pf::db;
 use pf::config::ui;
 use pf::pfcmd;
 use pf::util;
@@ -1158,6 +1159,7 @@ sub traplog {
 sub service {
     my $service = $cmd{command}[1];
     my $command = $cmd{command}[2];
+    $pf::db::NO_DIE_ON_DBH_ERROR = 1;
     require pf::services;
     import pf::services;
 

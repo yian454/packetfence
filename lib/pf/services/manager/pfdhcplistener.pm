@@ -26,6 +26,8 @@ has '+launcher' => (default => sub { '%1$s -d -l &' } );
 
 has '+launcher' => (default => sub { '%1$s -d -l &' } );
 
+has '+launcher' => (default => sub { '%1$s -d -l &' } );
+
 sub isManaged {
     isenabled($Config{'network'}{'dhcpdetector'})
 }

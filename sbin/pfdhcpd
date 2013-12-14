@@ -137,7 +137,7 @@ my $int;
 # Adding to select:
 my $read_set = new IO::Select();
 
-my $keep_int;
+my $keep_int = '';
 
 
 =head2 reload_config

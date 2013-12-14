@@ -136,7 +136,7 @@ my $int;
 # Adding to select:
 my $read_set = new IO::Select();
 
-my $keep_int;
+my $keep_int = '';
 
 =head2 reload_config
 
@@ -405,6 +405,7 @@ sub do_discover {
             $dhcpresp->addOptionValue(DHO_DHCP_RENEWAL_TIME() , $dhcp_config->{'dhcp_default_lease_time'}/2 );
             $dhcpresp->addOptionValue(DHO_DHCP_REBINDING_TIME() , $dhcp_config->{'dhcp_default_lease_time'} - 5 );
 
+
         $logger->debug($dhcpresp->toString());
         if(!defined($listener)) {
             # Parse the dhcp offer
@@ -519,6 +520,8 @@ sub do_request {
         # No dhcp zone then we parse the dhcp request (Listener)
         parse_dhcp_request($dhcpreq,$ip_src);
     }
+    # No dhcp zone the we parse the dhcp request (Listener)
+    parse_dhcp_request($dhcpreq,$ip_src) ;
 }
 
 sub calc_ip {

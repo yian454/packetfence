@@ -79,11 +79,11 @@ sub stats_http {
 
     $this->mac_exist($mac);
 
-    my $sth = $sqlite->prepare( "SELECT mac FROM http WHERE mac = (?) and hash = (?)" );
-    $sth->execute($mac,$hash);
+    my $sth = $sqlite->prepare( "SELECT mac FROM http WHERE mac = (?) and url = (?) and user_agent = (?) and uaprof =(?)" );
+    $sth->execute($mac,$url,$user_agent,$headers);
     if (!$sth->fetchrow()) {
-        $sth = $sqlite->prepare( "INSERT INTO http(mac,hash,user_agent,uaprof,suites) VALUES (?,?,?,?,?)");
-        $sth->execute($mac,$hash,$user_agent,$headers,$suites);
+        $sth = $sqlite->prepare( "INSERT INTO http(mac,url,user_agent,uaprof) VALUES (?,?,?,?)");
+        $sth->execute($mac,$url,$user_agent,$headers);
     }
 }
 

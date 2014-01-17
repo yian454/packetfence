@@ -44,8 +44,12 @@ sub importCsv {
     my $rows = $self->getRows($file);
     foreach my $row (@$rows) {
         my $data = $self->makeEntry($row);
-        my $object = $self->object_class->new(%$data);
-        $object->load( speculative => 1);
+        my $pkeys = $self->object_class->meta->primary_key_column_names;
+        my %init;
+        @init{@$pkeys} = @$data{@$pkeys};
+        my $object = $self->object_class->new(%init);
+        $object->load( for_update => 1, speculative => 1);
+        $object->init(%$data);
         $object->save;
     }
     return 1;

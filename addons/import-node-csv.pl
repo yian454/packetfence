@@ -88,7 +88,7 @@ while (my $row = $csv->getline($io)) {
             print "MAC: $mac\tCategory: $category\tPID: $pid\t - added to database\n";
             $macHash{'pid'} = $pid;
             $macHash{'category'} = $category;
-            $macHash{'unregdate'} = 0;
+            $macHash{'unregdate'} = "2014-01-01 00:00:00";
             node_add_simple($mac);
             node_modify( $mac, %macHash );
         } else {

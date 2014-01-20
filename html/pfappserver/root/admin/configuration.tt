@@ -93,7 +93,7 @@ table.sources {
               <li class="nav-header">[% l('Network') %]<li>
               [% pf_section_entry( 'interfaces', 'Interfaces') %]
               [% pf_section_entry( 'switches', 'Switches') %]
-              [% list_entry('Configuration::Wrix', 'index', 'Wrix') %]
+              [% list_entry('Configuration::Wrix', 'index', 'WRIX-L') %]
               [% pf_section_entry( 'floating_devices', 'Floating devices') %]
               <li class="nav-header">[% l('Users') %]</li>
               [% pf_section_entry( 'roles', 'Roles') %]

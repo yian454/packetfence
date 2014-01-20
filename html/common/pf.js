@@ -92,7 +92,13 @@ function performRedirect(destination_url) {
  http://my.cn.opera.com/community/forums/topic.dml?id=880632&t=1298063094
  */
 function detectNetworkAccess(retry_delay, destination_url, redirect_url, external_ip) {
-  
+
+
+    tryNetworkAccess(retry_delay, destination_url, redirect_url, external_ip);
+    return;
+
+
+
     // stop-condition
     if (!network_redirected) {
 
@@ -103,12 +109,28 @@ function detectNetworkAccess(retry_delay, destination_url, redirect_url, externa
         // the image src with caching prevention
         // Note: it is very important to change the source AFTER setting the onload otherwise its not as reliable
         // see: http://www.thefutureoftheweb.com/blog/image-onload-isnt-being-called
-        $('netdetect').src = "http://" + external_ip + "/common/network-access-detection.gif?r=" + Date.now();
+        $('netdetect').src = "http://" + external_ip + "/1px.php?" + Date.now();
 
         // recurse
         detectNetworkAccess.delay(retry_delay, retry_delay, destination_url, redirect_url, external_ip);
     }
 }
+
+function tryNetworkAccess(retry_delay, destination_url, redirect_url, external_ip){
+    $j.ajax({ 
+        cache: false,
+        timeout: 2000,
+        url: "http://" + external_ip + "/1px.php",
+        success: function (data) {
+            networkAccessCallback(destination_url, redirect_url);
+        },
+        error: function (ajaxContext) {
+            window.setTimeout( function(){tryNetworkAccess(retry_delay, destination_url, redirect_url, external_ip);}, 10, retry_delay, destination_url, redirect_url, external_ip);
+        }
+    });
+}
+
+
 
 /**
  confirmToQuit

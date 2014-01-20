@@ -1,15 +1,15 @@
 [%# Footer %]
     </div>
     <div id="footer">
+	<div style="display: inline-block;"><img src="/common/logos.png" alt="Partner Logos" /></div>
+	<p>By using this service you agree to the <a href="http://www.mts.ca/termsandconditions">MTS&nbsp;Terms&nbsp;and&nbsp;Conditions</a>.</p>
+<!--
       [% UNLESS dont_show_help -%]
-      <img src="/content/images/help.png" alt="Help" />
-      <p>[% i18n("help: provide info") %]</p>
-      <ul>
         [%  FOREACH txt_help_info IN list_help_info %]
-          <li>[% txt_help_info.name %]: [% txt_help_info.value %]</li>
+          [% txt_help_info.name %]: [% txt_help_info.value %]
         [%  END %]
-      </ul>
       [%- END %]
+-->
     </div>
   </div>
   </body>

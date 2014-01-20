@@ -2,81 +2,43 @@
 [% INCLUDE header.html 
     body_attributes = 'onload="$(\'username\').focus();"';
 %]
-
-<script type="text/javascript">
-document.observe("dom:loaded", function() {
-
-        // Don't propagate mouse clicks on disabled buttons and links
-        $$(".btn").each(function(e) {
-                e.on("click", function(event) {
-                        if (Event.element(event).hasClassName('disabled')) {
-                                Event.stop(event);
-                                return false;
-                        }
-                        return true;
-                });
-        });
-
-        // Toggle the disable state of the buttons and links when the user
-        // accepts or refuses the AUP
-        $$("input[name='aup_signed']").each(function(e) {
-                e.on("change", function(event) {
-                        var accepted = e.checked;
-                        $$(".btn").each(function(btn) {
-                                if (accepted)
-                                        btn.removeClassName('disabled');
-                                else
-                                        btn.addClassName('disabled');
-                        });
-                });
-        });
-
-});
-</script>
-
-        [%# Welcome text %]
         <div id="about">
-          <img src="/content/images/lock.png" alt="You are not authorized" />
-          <p>[% i18n("register: all systems must be registered") %]</p>
-          <p>[% i18n("register: to complete") %]</p>
-          <hr/>
+	<p style="font-size: 20px; font-family: Humanist777BT-BoldB;">MTS Wi-Fi Hotspot Login</p>
+	<p style="font-size: 15px;">Free for MTS High Speed Internet<br />or Wireless customers</p>
         </div>
 
         [%# Error %]
         [% IF txt_auth_error.defined %]<div class="error"><p>[% txt_auth_error %]</p></div>[% END %]
-
+        <div class="inputwrap">
         <form name="login" method="post" action="/authenticate">
           <input type="hidden" name="destination_url" value="[% destination_url %]" />
 
           [%# AUP %]
           <div class="input">
-            <div>[% i18n("Acceptable Use Policy") %]</div>
-            <div id="aup" class="notmobile">
-              [% INCLUDE aup_text.html %]
-            </div>
             [%# The space below is intententionnal %]
-            <div class="notmobile"><label><input name="aup_signed" type="checkbox" /> [% i18n("I accept the terms") %]</label></div>
-            <div class="mobile"><input name="aup_signed" type="checkbox" />[% i18n("I have read and accept the terms") %]</div>
+            <div class="notmobile"><input name="aup_signed"  type="hidden" value="on" /></div>
+            <div class="mobile"><input name="aup_signed" type="hidden" value="on" /></div>
           </div>
 
           [%# User / Pass %]
           [% UNLESS no_username %]
-          <div class="input">
-            <span>[% IF null_source %][% i18n("Email") %] [% ELSE %] [% i18n("Username") %][% END %]</span>
-	    <input class="field" name="username" id="username" type="text" value="[% username %]" />
+          <div class="input" font-family: style="font-family: Humanist777BT-BoldB;">
+            <span>[% IF null_source %][% i18n("Email") %] [% ELSE %] [% i18n("Username:") %][% END %]</span>
+	    <input class="field" name="username" id="username" type="text" value="[% username %]" autofocus="autofocus" />
           </div>
           [% ELSE %]
 	    <input class="field" name="username" id="username" type="hidden" value="" />
           [% END %]
           [% UNLESS null_source %]
-          <div class="input">
-            <span>[% i18n("Password") %]</span><input class="field" name="password" type="password" />
+          <div class="input" style="font-family: Humanist777BT-BoldB;">
+            <span>[% i18n("Password:") %]</span><input class="field" name="password" type="password" />
           </div>
           [% END %]
-          
+         
           [%# submit %]
-          <div class="input">
-            <input type="submit" class="btn disabled" name="submit" value="[% i18n("Login") %]" />
+          <div class="input" style="text-align: right;">
+            <div style="float: left; font-size: 12px;"><a style="text-decoration: none; color: #005cab" href="http://www.mts.ca/mts/support/internet/wireless+internet/how+to+log+in+to+an+mts+wifi+hotspot">Need help?</a></div> 
+             <input type="submit" class="btn" name="submit" value="[% i18n("Login") %]" />
           </div>
 
           [% IF oauth2_google || oauth2_facebook || oauth2_github %]
@@ -102,6 +64,15 @@ document.observe("dom:loaded", function() {
               <a href="[% URL_SIGNUP %]">[% i18n("Sign up") %]</a>
           </div>
             [% END -%]
+            [% IF billing_allowed -%]
+          <div class="input">
+               <div class="separator"><div class="or_separator">or</div></div> 
+	      <a style="text-decoration: none; color: #005cab;" href="[% URL_BILLING %]">Purchase Wi-Fi access</a><br />
+	      <a href="[% URL_BILLING %]"><img src="content/images/creditcards.png" alt="Credit Cards" /></a>
+          </div>
+            [% END -%]
         </form>
+            <div style="font-size: 12px; padding-top: 15px">For help with your login ID or password,<br> please <a style="color: #005cab; text-decoration: none;" href="http://www.mts.ca/contactus">Contact Us</a>.</div>
+     </div>
 
 [% INCLUDE footer.html %]

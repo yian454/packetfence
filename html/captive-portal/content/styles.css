@@ -1,5 +1,5 @@
 body {
-  background: url('images/background.png') #4d4d4d repeat;
+  
 }
 .mobile {
   display: none;
@@ -10,7 +10,7 @@ div#container {
 }
 div#header {
   padding-bottom: 10px;
-  text-align: center;
+  text-align: left;
 }
 div#content,
 div#footer {

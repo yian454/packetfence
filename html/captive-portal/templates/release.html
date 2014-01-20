@@ -27,10 +27,9 @@ document.observe("dom:loaded", function() {
 });
 </script>
 
-        <div id="about">
-          <img src="/content/images/unlock.png" alt="Access granted" />
+        <div id="about" style="font-size: 14px">
           [% IF auto_redirect == "enabled" %]
-          <p id="toReplace">[% i18n("Your network access is currently being enabled. Once network connectivity is established you will be automatically redirected.") %]</p>
+          <p id="toReplace">[% i18n("Your network access is currently being enabled. Please wait....") %]</p>
           [% ELSE %]
           <p id="toReplace">[% i18n("Your network access is currently being enabled. Please wait...") %]</p>
           [% END %]

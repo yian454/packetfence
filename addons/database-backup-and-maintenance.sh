@@ -16,11 +16,12 @@
 # Installation: make sure you have locationlog_history (based on locationlog) and edit DB_PWD to fit your password.
 
 NB_DAYS_TO_KEEP=70
-DB_USER='pf';
+PF_CMD=/usr/local/pf/bin/pfcmd
 # make sure access to this file is properly secured! (chmod a=,u=rwx)
-DB_PWD='';
-DB_NAME='pf';
-BACKUP_DIRECTORY='/root/backup'
+DB_PWD=$($PF_CMD config get database.pass | perl -pi -e's/^database.pass=//' | cut -d'|' -f1)
+DB_NAME=$($PF_CMD config get database.db | perl -pi -e's/^database.db=//' | cut -d'|' -f1)
+DB_USER=$($PF_CMD config get database.user | perl -pi -e's/^database.user=//' | cut -d'|' -f1)
+BACKUP_DIRECTORY='/home/backup'
 BACKUP_DB_FILENAME='packetfence-db-dump'
 ARCHIVE_DIRECTORY=$BACKUP_DIRECTORY
 ARCHIVE_DB_FILENAME='packetfence-archive'
@@ -58,10 +59,10 @@ if [ -f /var/run/mysqld/mysqld.pid ]; then
         current_filename=$ARCHIVE_DIRECTORY/$ARCHIVE_DB_FILENAME-`date +%Y%m%d`.sql
         mysqldump -u $DB_USER -p$DB_PWD $DB_NAME --tables locationlog_history --skip-opt --no-create-info --quick --where='((end_time IS NOT NULL OR end_time <> 0) AND end_time < DATE_FORMAT(DATE_SUB(CURDATE(), INTERVAL 1 YEAR),"%Y-%m-01"))' > $current_filename && \
         gzip $current_filename && \
-        mysql -u $DB_USER -p$DB_PWD -D $DB_NAME -e 'LOCK TABLES locationlog_history WRITE; DELETE FROM locationlog_history WHERE ((end_time IS NOT NULL OR end_time <> 0) AND end_time < DATE_FORMAT(DATE_SUB(CURDATE(), INTERVAL 1 YEAR),"%Y-%m-01")); UNLOCK TABLES;'
+        mysql -u $DB_USER -p$DB_PWD -D $DB_NAME -e 'DELETE FROM locationlog_history WHERE ((end_time IS NOT NULL OR end_time <> 0) AND end_time < DATE_FORMAT(DATE_SUB(CURDATE(), INTERVAL 1 YEAR),"%Y-%m-01"));'
 
         #Clean Accounting for previous year... if needed
-        mysql -u $DB_USER -p$DB_PWD -D $DB_NAME -e 'LOCK TABLES radacct WRITE; DELETE FROM radacct WHERE YEAR(acctstarttime) < YEAR(CURRENT_DATE()); UNLOCK TABLES;'
-        mysql -u $DB_USER -p$DB_PWD -D $DB_NAME -e 'LOCK TABLES radacct_log WRITE; DELETE FROM radacct_log WHERE YEAR(timestamp) < YEAR(CURRENT_DATE()); UNLOCK TABLES;'
+        mysql -u $DB_USER -p$DB_PWD -D $DB_NAME -e 'DELETE FROM radacct WHERE YEAR(acctstarttime) < YEAR(CURRENT_DATE());'
+        mysql -u $DB_USER -p$DB_PWD -D $DB_NAME -e 'DELETE FROM radacct_log WHERE YEAR(timestamp) < YEAR(CURRENT_DATE());'
     fi
 fi

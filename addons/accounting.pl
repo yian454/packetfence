@@ -29,11 +29,12 @@ use pf::person;
 use pf::locationlog;
 use pf::node;
 use pf::ifoctetslog;
+use pf::log;
 use threads;
 use threads::shared;
 use Thread::Pool;
 
-my $logger = Log::Log4perl->get_logger('');
+my $logger = get_logger('');
 
 my $switchFactory = new pf::SwitchFactory(
     -configFile => INSTALL_DIR . '/conf/switches.conf'

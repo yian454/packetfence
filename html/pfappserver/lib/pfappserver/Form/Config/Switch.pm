@@ -385,7 +385,7 @@ has_field 'wsPwd' =>
 
 has_field controllerIp =>
   (
-    type => 'IPAddress',
+    type => 'Text',
     label => 'Controller IP Address',
     tags => {
         after_element => \&help,

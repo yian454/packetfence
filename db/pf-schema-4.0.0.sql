@@ -113,6 +113,8 @@ CREATE TABLE node (
   CONSTRAINT `node_category_key` FOREIGN KEY (`category_id`) REFERENCES `node_category` (`category_id`)
 ) ENGINE=InnoDB;
 
+ALTER TABLE node ADD `timeleft` int unsigned AFTER `lastskip`;
+
 --
 -- Table structure for table `node_useragent`
 --
@@ -805,3 +807,5 @@ CREATE TABLE savedsearch (
   in_dashboard tinyint,
   PRIMARY KEY (id)
 ) ENGINE=InnoDB;
+
+ALTER TABLE node ADD `timeleft` int unsigned AFTER `lastskip`;

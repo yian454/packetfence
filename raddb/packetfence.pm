@@ -96,7 +96,9 @@ sub post_auth {
             return $RADIUS::RLM_MODULE_OK;
         }
 
-        my $data = send_soap_request("radius_authorize",\%RAD_REQUEST);
+        my $data = send_soap_request("radius_authorize",\%RAD_REQUEST,$mac);
+	#use Data::Dumper;
+        #print Dumper($data);
         if ($data) {
 
             my $elements = $data->{'soap:Body'}->{'radius_authorizeResponse'}->{'soapenc:Array'}->{'item'};
@@ -144,6 +146,86 @@ sub post_auth {
     }
 
     return $radius_return_code;
+}
+
+sub prepare_xml {
+    my ($uri) = @_;
+
+    # Build the SOAP request manually (using CURL)
+    # We use CURL to manually build the SOAP request rather than using an existing SOAP module due to the fact that
+    # the SOAP module is not threadsafe.
+    #
+    # SOAP request sample:
+        # <?xml version="1.0" encoding="UTF-8"?>
+        # <soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:soapenc="http://schemas.xmlsoap.org/soap/encoding/" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" soap:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">
+        # <soap:Body>
+        # <radius_authorize xmlns="https://www.packetfence.org/PFAPI">
+        # <c-gensym1 xsi:type="xsd:string">NAS-Port-Type</c-gensym1>
+        # <c-gensym1 xsi:type="xsd:string">Wireless-802.11</c-gensym1>
+        # <c-gensym2 xsi:type="xsd:string">Service-Type</c-gensym2>
+        # <c-gensym2 xsi:type="xsd:string">Login-User</c-gensym2>
+        # <c-gensym3 xsi:type="xsd:string">Calling-Station-Id</c-gensym3>
+        # <c-gensym3 xsi:type="xsd:string">001b.b18b.8213</c-gensym3>
+        # <c-gensym4 xsi:type="xsd:string">Called-Station-Id</c-gensym4>
+        # <c-gensym4 xsi:type="xsd:string">001b.2a95.8771</c-gensym4>
+        # <c-gensym5 xsi:type="xsd:string">State</c-gensym5>
+        # <c-gensym5 xsi:type="xsd:string">0x8ba4259b8aac3f16886f7528125121ad</c-gensym5>
+        # <c-gensym6 xsi:type="xsd:string">FreeRADIUS-Proxied-To</c-gensym6>
+        # <c-gensym6 xsi:type="xsd:string">127.0.0.1</c-gensym6>
+        # <c-gensym7 xsi:type="xsd:string">User-Name</c-gensym7>
+        # <c-gensym7 xsi:type="xsd:string">host/TESTINGLAPTOP.inverse.local</c-gensym7>
+        # <c-gensym8 xsi:type="xsd:string">NAS-Identifier</c-gensym8>
+        # <c-gensym8 xsi:type="xsd:string">ap</c-gensym8>
+        # <c-gensym9 xsi:type="xsd:string">EAP-Message</c-gensym9>
+        # <c-gensym9 xsi:type="xsd:string">0x020800061a03</c-gensym9>
+        # <c-gensym10 xsi:type="xsd:string">EAP-Type</c-gensym10>
+        # <c-gensym10 xsi:type="xsd:string">MS-CHAP-V2</c-gensym10>
+        # <c-gensym11 xsi:type="xsd:string">Stripped-User-Name</c-gensym11>
+        # <c-gensym11 xsi:type="xsd:string">TESTINGLAPTOP$</c-gensym11>
+        # <c-gensym12 xsi:type="xsd:string">NAS-IP-Address</c-gensym12>
+        # <c-gensym12 xsi:type="xsd:string">10.0.0.199</c-gensym12>
+        # <c-gensym13 xsi:type="xsd:string">NAS-Port</c-gensym13>
+        # <c-gensym13 xsi:type="xsd:string">277</c-gensym13>
+        # <c-gensym14 xsi:type="xsd:string">Framed-MTU</c-gensym14>
+        # <c-gensym14 xsi:type="xsd:string">1400</c-gensym14>
+        # </radius_authorize>
+        # </soap:Body>
+        # </soap:Envelope>
+
+    my $request_prefix = '<?xml version="1.0" encoding="UTF-8"?><soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:soapenc="http://schemas.xmlsoap.org/soap/encoding/" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" soap:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/"><soap:Body><'.$uri.' xmlns="' . API_URI . '">';
+
+    my $request_content = '';
+    my $counter = 1;    # looks like this one is not mandatory, we still use it to keep track of keys/values
+
+    foreach my $key ( keys %RAD_REQUEST ) {
+        # RADIUS Vendor Specific Attributes (VSA) are in the form of an ARRAY which is special in SOAP...
+        if ( ref($RAD_REQUEST{$key}) eq 'ARRAY' ) {
+            my $array_content = '';
+            my $array_counter = 0;  # that one is actually important...
+            $request_content = $request_content .
+                "<c-gensym$counter xsi:type=\"xsd:string\">$key</c-gensym$counter>";
+            foreach my $array_value ( @{$RAD_REQUEST{$key}} ) {
+                $array_counter += 1;    # that one is actually important...
+                $array_content = $array_content . "<item xsi:type=\"xsd:string\">$array_value</item>";
+                $counter += 1;  # looks like this one is not mandatory, we still use it to keep track of keys/values
+            }
+            $request_content = $request_content .
+                "<soapenc:Array soapenc:arrayType=\"xsd:string[$array_counter]\" xsi:type=\"soapenc:Array\">";
+            $request_content = $request_content . $array_content;
+            $request_content = $request_content . "</soapenc:Array>";
+        } else {
+            $request_content = $request_content .
+                "<c-gensym$counter xsi:type=\"xsd:string\">$key</c-gensym$counter>";
+            $request_content = $request_content .
+                "<c-gensym$counter xsi:type=\"xsd:string\">$RAD_REQUEST{$key}</c-gensym$counter>";
+            $counter += 1;  # looks like this one is not mandatory, we still use it to keep track of keys/values
+        }
+    }
+
+    my $request_suffix = '</'.$uri.'></soap:Body></soap:Envelope>';
+
+    my $request = $request_prefix . $request_content . $request_suffix;
+    return $request;
 }
 
 =item * server_error_handler
@@ -229,8 +311,9 @@ sub preacct {
 
 # Function to handle accounting
 sub accounting {
-    my $radius_return_code = eval {
-        my $rc = $RADIUS::RLM_MODULE_REJECT;
+    my $radius_return_code = $RADIUS::RLM_MODULE_OK;
+    #$RADIUS::RLM_MODULE_REJECT;
+    eval {
         my $mac = clean_mac($RAD_REQUEST{'Calling-Station-Id'});
         my $port = $RAD_REQUEST{'NAS-Port'};
 
@@ -246,41 +329,40 @@ sub accounting {
             return $RADIUS::RLM_MODULE_OK;
         }
 
-        my $data = send_soap_request("radius_accounting", \%RAD_REQUEST);
+        my $data = send_soap_request("radius_accounting",\%RAD_REQUEST,$mac);
         if ($data) {
-            my $elements = $data->{'soap:Body'}->{'radius_accountingResponse'}->{'soapenc:Array'}->{'item'};
 
-            # Get RADIUS return code
-            $rc = shift @$elements;
 
-            if ( !defined($rc) || !($rc > $RADIUS::RLM_MODULE_REJECT && $rc < $RADIUS::RLM_MODULE_NUMCODES) ) {
-                return invalid_answer_handler();
-            }
+        my $elements = $data->{'soap:Body'}->{'radius_accountingResponse'}->{'soapenc:Array'}->{'item'};
 
-            # Merging returned values with RAD_REPLY, right-hand side wins on conflicts
-            my $attributes = {@$elements};
-            %RAD_REPLY = (%RAD_REPLY, %$attributes); # the rest of result is the reply hash passed by the radius_authorize
+        # Get RADIUS return code
+        $radius_return_code = shift @$elements;
+
+        if ( !defined($radius_return_code) || !($radius_return_code > $RADIUS::RLM_MODULE_REJECT && $radius_return_code < $RADIUS::RLM_MODULE_NUMCODES) ) {
+            return invalid_answer_handler();
+        }
+
+        # Merging returned values with RAD_REPLY, right-hand side wins on conflicts
+        my $attributes = {@$elements};
+        %RAD_REPLY = (%RAD_REPLY, %$attributes); # the rest of result is the reply hash passed by the radius_authorize
         } else {
             return server_error_handler();
         }
 
-        return $rc;
+        # For debugging purposes
+        #&radiusd::radlog($RADIUS::L_INFO, "radius_return_code: $radius_return_code");
+
+        &radiusd::radlog($RADIUS::L_DBG, "PacketFence RESULT RESPONSE CODE: $radius_return_code (2 means OK)");
+
+        # Uncomment for verbose debugging with radius -X
+        # Warning: This is a native module so you shouldn't run it with radiusd in threaded mode (default)
+         # use Data::Dumper;
+        # $Data::Dumper::Terse = 1; $Data::Dumper::Indent = 0; # pretty output for rad logs
+        # &radiusd::radlog($RADIUS::L_DBG, "PacketFence COMPLETE REPLY: ". Dumper(\%RAD_REPLY));
     };
     if ($@) {
         &radiusd::radlog($RADIUS::L_ERR, "An error occurred while processing the authorize SOAP request: $@");
-        $radius_return_code = server_error_handler();
     }
-
-    # For debugging purposes
-    #&radiusd::radlog($RADIUS::L_INFO, "radius_return_code: $radius_return_code");
-
-    &radiusd::radlog($RADIUS::L_DBG, "PacketFence RESULT RESPONSE CODE: $radius_return_code (2 means OK)");
-
-    # Uncomment for verbose debugging with radius -X
-    # Warning: This is a native module so you shouldn't run it with radiusd in threaded mode (default)
-    # use Data::Dumper;
-    # $Data::Dumper::Terse = 1; $Data::Dumper::Indent = 0; # pretty output for rad logs
-    # &radiusd::radlog($RADIUS::L_DBG, "PacketFence COMPLETE REPLY: ". Dumper(\%RAD_REPLY));
 
     return $radius_return_code;
 }

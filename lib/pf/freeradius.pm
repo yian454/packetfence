@@ -25,6 +25,7 @@ use warnings;
 use Carp;
 use Log::Log4perl;
 use Readonly;
+use List::MoreUtils qw(natatime);
 
 use constant FREERADIUS => 'freeradius';
 use constant SWITCHES_CONF => '/switches.conf';
@@ -69,7 +70,7 @@ sub freeradius_db_prepare {
     if($dbh) {
 
         $freeradius_statements->{'freeradius_delete_all_sql'} = $dbh->prepare(qq[
-            DELETE FROM radius_nas
+            TRUNCATE TABLE radius_nas
         ]);
 
         $freeradius_statements->{'freeradius_insert_nas'} = $dbh->prepare(qq[
@@ -99,6 +100,26 @@ sub _delete_all_nas {
     return 1;
 }
 
+=item _insert_nas_bulk
+
+Add a new NAS (FreeRADIUS client) record
+
+=cut
+
+sub _insert_nas_bulk {
+    my (@rows) = @_;
+    my $logger = Log::Log4perl::get_logger('pf::freeradius');
+    return 0 unless @rows;
+    my $row_count = @rows;
+    my $sql = "INSERT INTO radius_nas ( nasname, shortname, secret, description) VALUES ( ?, ?, ?, ?)" . ",( ?, ?, ?, ?)" x ($row_count -1)    ;
+    $freeradius_statements->{'freeradius_insert_nas_bulk'} = $sql;
+
+    db_query_execute(
+        FREERADIUS, $freeradius_statements, 'freeradius_insert_nas_bulk', map  { @$_ } @rows
+    ) || return 0;
+    return 1;
+}
+
 =item _insert_nas
 
 Add a new NAS (FreeRADIUS client) record
@@ -124,27 +145,28 @@ Populates the radius_nas table with switches in switches.conf.
 # First, we aim at reduced complexity. I prefer to dump and reload than to deal with merging config vs db changes.
 sub freeradius_populate_nas_config {
     my $logger = Log::Log4perl::get_logger('pf::freeradius');
+    return unless db_ping;
     my ($switch_config) = @_;
+    my %skip = (default => undef, '127.0.0.1' => undef );
+    my $radiusSecret;
+    my @switches = grep {
+            !exists $skip{$_}
+          && defined( $radiusSecret = $switch_config->{$_}{radiusSecret} )
+          && $radiusSecret =~ /\S/
+    } keys %$switch_config;
+    return unless @switches;
 
     if (!_delete_all_nas()) {
         $logger->info("Problem emptying FreeRADIUS nas clients table.");
     }
-
-    foreach my $switch (keys %$switch_config) {
-
-        # we skip the 'default' entry or the local switch
-        if ($switch eq 'default' || $switch eq '127.0.0.1') { next; }
-
-        my $sw_radiussecret = $switch_config->{$switch}{'radiusSecret'};
-
-        # skipping unless switch's radiusSecret exists and is not all whitespace
-        unless (defined $sw_radiussecret && $sw_radiussecret =~ /\S/ ) {
-            $logger->debug("No RADIUS secret for switch: $switch FreeRADIUS configuration skipped");
-            next;
-        }
-
+    my $it = natatime 100,@switches;
+    while (my @ids = $it->() ) {
+        my @rows = map {
+            my $data = $switch_config->{$_};
+            [ $_, $_, $data->{radiusSecret}, $_ . " (" . $data->{'type'} .")"  ]
+        } @ids;
         # insert NAS
-        _insert_nas( $switch, $switch, $sw_radiussecret, $switch . " (" . $switch_config->{$switch}{'type'} .")");
+        _insert_nas_bulk( @rows );
     }
 }
 

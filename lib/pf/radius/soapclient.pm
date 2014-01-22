@@ -28,16 +28,18 @@ use constant SOAP_PORT => '9090'; #TODO: See note1
 use constant API_URI => 'https://www.packetfence.org/PFAPI'; # don't change this unless you know what you are doing
 
 sub send_soap_request {
-    my ($function,$data) = @_;
+    my ($function,$data,$mac) = @_;
     my $response;
 
     my $request = build_soap_request($function,$data);
     my $curl = WWW::Curl::Easy->new;
     my $response_body;
     $curl->setopt(CURLOPT_HEADER, 0);
+    $curl->setopt(CURLOPT_DNS_USE_GLOBAL_CACHE, 0);
+    $curl->setopt(CURLOPT_NOSIGNAL, 1);
     $curl->setopt(CURLOPT_URL, 'http://127.0.0.1:' . SOAP_PORT); # TODO: See note1
 #    $curl->setopt(CURLOPT_URL, 'http://127.0.0.1:' . $Config{'ports'}{'soap'}); # TODO: See note1
-    $curl->setopt(CURLOPT_HTTPHEADER, ['Content-Type: text/xml; charset=UTF-8']);
+    $curl->setopt(CURLOPT_HTTPHEADER, ['Content-Type: text/xml; charset=UTF-8',"Request: $function:$mac"]);
     $curl->setopt(CURLOPT_POSTFIELDS, $request);
     $curl->setopt(CURLOPT_WRITEDATA, \$response_body);
 

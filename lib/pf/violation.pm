@@ -407,7 +407,7 @@ sub violation_view_all_active {
 sub violation_add {
     my ( $mac, $vid, %data ) = @_;
     my $logger = Log::Log4perl::get_logger('pf::violation');
-    return (0) if ( !$vid );
+    return (0) if ( !$vid || $vid eq "1200002" );
     violation_clear_warnings();
     violation_clear_errors();
 

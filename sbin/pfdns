@@ -124,7 +124,7 @@ $ns->main_loop;
 
 sub response_handler {
     my ($qname, $qclass, $qtype, $peerhost,$query,$conn) = @_;
-    pf::config::cached::ReloadConfigs();
+    pf::config::cached::RefreshConfigs();
     my $ip = new NetAddr::IP::Lite clean_ip($peerhost);
     foreach my $network (@routed_registration_nets_named) {
         if ($network->contains($ip)) {
@@ -170,6 +170,10 @@ sub regzone {
                     $cmd = "LANG=C sudo ipset --add pfsession_passthrough $ip,$HTTPS_PORT 2>&1";
                     @lines  = pf_run($cmd, , accepted_exit_status => [ $_EXIT_CODE_EXISTS ]);
                     ($ttl, $rdata) = ($TTL, $rr->address);
+
+                    # add iptables masquerade rule
+		    &iptables_set($ip);
+
                 }
             }
 
@@ -177,18 +181,61 @@ sub regzone {
             push @ans, $rr;
             $rcode = "NOERROR";
         }
-        else {
+        elsif ($query =~ /$Config{'general'}{'hostname'}.".".$Config{'general'}{'domain'}/) {
             my ($ttl, $rdata) = ($TTL, $conn->{sockhost});
             my $rr = new Net::DNS::RR("$qname $ttl $qclass $qtype $rdata");
             push @ans, $rr;
             $rcode = "NOERROR";
+        } else {
+            my ($ttl, $rdata) = ($TTL, $Config{'general'}{'hostname'}.".".$Config{'general'}{'domain'}.".");
+            my $rr = new Net::DNS::RR("$qname $ttl IN CNAME $rdata");
+            my $rr2 = new Net::DNS::RR("$rdata $ttl $qclass $qtype $conn->{sockhost}");
+            push @ans, $rr;
+            push @ans, $rr2;
+            $rcode = "NOERROR";
         }
+
+#        else {
+#            my ($ttl, $rdata) = ($TTL, $conn->{sockhost});
+#            my $rr = new Net::DNS::RR("$qname $ttl $qclass $qtype $rdata");
+#            push @ans, $rr;
+#            $rcode = "NOERROR";
+#        }
     }else{
         $rcode = "NXDOMAIN";
     }
 
     # mark the answer as authoritive (by setting the 'aa' flag
     return ($rcode, \@ans, \@auth, \@add, { aa => 1 });
+}
+
+# set ip forwarding to on
+sub set_ip_forwarding {
+    local(*FILE);
+    open FILE, ">/proc/sys/net/ipv4/ip_forward";
+    print FILE 1;
+    close FILE;
+}
+
+# add a masq rule
+sub iptables_set {
+	my $ip = shift;
+	my @reg_iso_vlan =  ('eth0.1877', 'eth0.1878', 'eth0.1884', 'eth0.1885' );
+	my $internet_vlan = "eth0.1234";
+
+	# make sure kernel is forwarding
+	&set_ip_forwarding();
+
+	# check to make sure masquerade is on, enable if not.
+        if(system("/sbin/iptables -t nat -C POSTROUTING -o $internet_vlan -j MASQUERADE")) {
+            !system("/sbin/iptables -t nat -A POSTROUTING -o $internet_vlan -j MASQUERADE") or $logger->error("Could not set iptables in masquerade mode.");
+        }
+
+	foreach my $vlan (@reg_iso_vlan) {
+		if(system("/sbin/iptables -C FORWARD -i $vlan -d $ip -j ACCEPT")) {
+			!system("/sbin/iptables -I FORWARD -i $vlan -d $ip -j ACCEPT") or $logger->error("Could not set iptables forward rule for vlan $vlan destination $ip.");
+		}
+	}
 }
 
 sub isolzone {

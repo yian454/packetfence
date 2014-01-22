@@ -349,51 +349,33 @@ sub new {
     my $onCacheReload = delete $params{'-oncachereload'} || [];
     my $onPostReload = delete $params{'-onpostreload'} || [];
     my $reload_onfile;
-    if($file) {
-        $self = first { $_->GetFileName eq $file} @LOADED_CONFIGS;
-        if( defined $self) {
-            #Adding the reload and filereload callbacks
-            $self->addReloadCallbacks(@$onReload) if @$onReload;
-            $self->addFileReloadCallbacks(@$onFileReload) if @$onFileReload;
-            $self->addCacheReloadCallbacks(@$onCacheReload) if @$onCacheReload;
-            $self->addPostReloadCallbacks(@$onPostReload) if @$onPostReload;
-            #Rereading the config to ensure the latest version
-            $self->ReadConfig();
-        } else {
-            delete $params{'-file'} unless -e $file;
-            $config = $class->computeFromPath(
-                $file,
-                sub {
-                    my $lock = lockFileForReading($file);
-                    my $config = pf::IniFiles->new(%params);
-                    die "$file cannot be loaded" unless $config;
-                    $config->SetFileName($file);
-                    $config->SetWriteMode($WRITE_PERMISSIONS);
-                    my $mode = oct($config->GetWriteMode);
-                    chmod $mode, $file;
-                    $reload_onfile = 1;
-                    return $config;
-                }
-            );
+    die "param -file missing or empty" unless $file;
+    delete $params{'-file'} unless -e $file;
+    $config = $class->computeFromPath(
+        $file,
+        sub {
+            my $lock = lockFileForReading($file);
+            my $config = pf::IniFiles->new(%params);
+            die "$file cannot be loaded" unless $config;
+            $config->SetFileName($file);
+            $config->SetWriteMode($WRITE_PERMISSIONS);
+            $reload_onfile = 1;
+            return $config;
         }
-    } else {
-        die "param -file missing or empty";
-    }
-    if ($config) {
-        untaint($config) unless $reload_onfile;
-        $self = \$config;
-        $ON_RELOAD{$file} = [];
-        $ON_FILE_RELOAD{$file} = [];
-        $ON_CACHE_RELOAD{$file} = [];
-        $ON_POST_RELOAD{$file} = [];
-        bless $self,$class;
-        push @LOADED_CONFIGS, $self;
-        $self->addReloadCallbacks(@$onReload) if @$onReload;
-        $self->addFileReloadCallbacks(@$onFileReload) if @$onFileReload;
-        $self->addCacheReloadCallbacks(@$onCacheReload) if @$onCacheReload;
-        $self->addPostReloadCallbacks(@$onPostReload) if @$onPostReload;
-        $self->doCallbacks($reload_onfile,!$reload_onfile);
-    }
+    );
+    untaint($config) unless $reload_onfile;
+    $self = \$config;
+    $ON_RELOAD{$file} = [];
+    $ON_FILE_RELOAD{$file} = [];
+    $ON_CACHE_RELOAD{$file} = [];
+    $ON_POST_RELOAD{$file} = [];
+    bless $self,$class;
+    push @LOADED_CONFIGS, $self;
+    $self->addReloadCallbacks(@$onReload) if @$onReload;
+    $self->addFileReloadCallbacks(@$onFileReload) if @$onFileReload;
+    $self->addCacheReloadCallbacks(@$onCacheReload) if @$onCacheReload;
+    $self->addPostReloadCallbacks(@$onPostReload) if @$onPostReload;
+    $self->doCallbacks($reload_onfile,!$reload_onfile);
     return $self;
 }
 
@@ -529,13 +511,13 @@ sub _callPostReloadCallbacks {
 }
 
 sub doCallbacks {
-    my ($self,$file_reloaded,$cache_reloaded) = @_;
+    my ($self,$file_reloaded,$cache_reloaded,$skipPrePostReload) = @_;
     if($file_reloaded || $cache_reloaded) {
-        get_logger()->trace("doing callbacks file_reloaded = " . ($file_reloaded ? 1 : 0) .  "  cache_reloaded = " .  ($cache_reloaded ? 1 : 0));
-        $self->_callReloadCallbacks;
+        get_logger()->trace("doing callbacks for " . $self->GetFileName . " file_reloaded = " . ($file_reloaded ? 1 : 0) .  "  cache_reloaded = " .  ($cache_reloaded ? 1 : 0));
+        $self->_callReloadCallbacks unless $skipPrePostReload;
         $self->_callFileReloadCallbacks if $file_reloaded;
         $self->_callCacheReloadCallbacks if $cache_reloaded;
-        $self->_callPostReloadCallbacks;
+        $self->_callPostReloadCallbacks unless $skipPrePostReload;
     }
 }
 
@@ -632,9 +614,7 @@ Will reload the config when changed on the filesystem and call any register call
 sub ReadConfig {
     my ($self) = @_;
     my $config = $self->config;
-    my $cache  = $self->cache;
     my $file   = $config->GetFileName;
-    my $reloaded;
     my $reloaded_from_cache = 0;
     my $reloaded_from_file = 0;
     #If considered latest version of file it is always succesful
@@ -654,6 +634,28 @@ sub ReadConfig {
     $reloaded_from_cache = refaddr($config) != refaddr($$self);
     $self->doCallbacks($reloaded_from_file,$reloaded_from_cache);
     return $result;
+}
+
+=head2 RefreshConfig
+
+Will reload the config only from the cache
+
+=cut
+
+sub RefreshConfig {
+    my ($self) = @_;
+    my $config = $self->config;
+    my $file   = $config->GetFileName;
+    my $reloaded_from_cache = 0;
+    my $logger = get_logger();
+    $logger->trace("RefreshConfig for $file");
+    $$self = $self->computeFromPath(
+        $file,
+        sub {  $config }
+    );
+    $reloaded_from_cache = refaddr($config) != refaddr($$self);
+    $self->doCallbacks(0,$reloaded_from_cache);
+    return 1;
 }
 
 =head2 TIEHASH
@@ -723,26 +725,36 @@ sub computeFromPath {
 
 =head2 cache
 
-Get the global CHI object
+Get the global CHI object for configfiles
 
 =cut
 
 sub cache {
-    my ($self) = @_;
-    unless (defined($CACHE)) {
-        $CACHE = $self->_cache();
-    }
-    return $CACHE;
+    return pf::CHI->new(namespace => 'configfiles' );
 }
 
-=head2 _cache
+=head2 cacheForData
 
-Builds the CHI object
+Get the global CHI object for configfilesdata
 
 =cut
 
-sub _cache {
-    return pf::CHI->new(namespace => 'configfiles' );
+sub cacheForData {
+    return pf::CHI->new(namespace => 'configfilesdata' );
+}
+
+=head2 RefreshConfigs
+
+RefreshConfigs reload all configs and call any register callbacks
+
+=cut
+
+sub RefreshConfigs {
+    my $logger = get_logger();
+    $logger->trace("Refreshing all configs");
+    foreach my $config (@LOADED_CONFIGS) {
+        $config->RefreshConfig();
+    }
 }
 
 =head2 ReloadConfigs
@@ -883,7 +895,7 @@ sub isa {
 
 sub untaint_value {
     my $val = shift;
-    if(defined $val && $val =~ /^(.*)$/) {
+    if (defined $val && $val =~ /^(.*)$/) {
         return $1;
     }
 }
@@ -895,7 +907,7 @@ Copy configuration to a hash
 =cut
 
 sub toHash {
-    my ($self,$hash) = @_;
+    my ($self, $hash) = @_;
     %$hash = ();
     my @default_parms;
     if (exists $self->{default} ) {
@@ -903,35 +915,40 @@ sub toHash {
     }
     foreach my $section ($self->Sections()) {
         my %data;
-        foreach my $param ( map { untaint_value($_) } uniq $self->Parameters($section),@default_parms) {
-            $data{$param} = untaint ($self->val($section,$param));
+        foreach my $param ( map { untaint_value($_) } uniq $self->Parameters($section), @default_parms) {
+            my $val = $self->val($section, $param);
+            $data{$param} = untaint($val);
         }
         $hash->{$section} = \%data;
     }
 }
 
 sub fromCacheUntainted {
-    my ($self,$key) = @_;
-    $self->removeFromSubcaches($key);
+    my ($self, $key) = @_;
+#    $self->removeFromSubcaches($key);
     return untaint($self->cache->get($key));
 }
 
+sub fromCacheForDataUntainted {
+    my ($self, $key) = @_;
+    return untaint($self->cacheForData->get($key));
+}
+
 sub removeFromSubcaches {
-    my ($self,$key) = @_;
+    my ($self, $key) = @_;
     my $cache = $self->cache;
     if($cache->has_subcaches) {
         get_logger->trace("Removing from subcache");
-        $cache->l1_cache->expire($key);
         $cache->l1_cache->remove($key);
     }
 }
 
 sub untaint {
     my $val = $_[0];
-    if (tainted ($val)) {
+    if (tainted($val)) {
         $val = untaint_value($val);
-    } elsif( my $type = reftype($val)) {
-        if($type eq 'ARRAY') {
+    } elsif (my $type = reftype($val)) {
+        if ($type eq 'ARRAY') {
             foreach my $element (@$val) {
                 $element = untaint($element);
             }

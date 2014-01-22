@@ -46,15 +46,15 @@ use pf::services::snort qw(generate_snort_conf);
 use pf::services::suricata qw(generate_suricata_conf);
 use pf::SwitchFactory;
 use pf::violation_config;
-use File::Slurp qw(read_file);
-
-Readonly our @APACHE_SERVICES => (
-    'httpd.admin', 'httpd.webservices', 'httpd.portal', 'httpd.proxy'
-);
 
 Readonly our @ALL_SERVICES => (
-    'memcached', @APACHE_SERVICES, 'pfdns', 'dhcpd', 'pfdetect', 'snort', 'suricata', 'radiusd',
-    'snmptrapd', 'pfsetvlan', 'pfdhcplistener', 'pfmon'
+    'pfcache','pfdns', 'dhcpd', 'pfdetect', 'snort', 'suricata', 'radiusd',
+    'httpd.webservices', 'httpd.admin', 'httpd.portal', 'snmptrapd',
+    'pfsetvlan', 'pfdhcplistener', 'pfmon'
+);
+
+Readonly our @APACHE_SERVICES => (
+    'httpd.webservices', 'httpd.admin', 'httpd.portal'
 );
 
 my $services = join("|", @ALL_SERVICES);
@@ -82,10 +82,10 @@ $service_launchers{'httpd'} = "%1\$s -f $conf_dir/httpd.conf";
 $service_launchers{'httpd.webservices'} = "%1\$s -f $conf_dir/httpd.conf.d/httpd.webservices -D$OS";
 $service_launchers{'httpd.admin'} = "%1\$s -f $conf_dir/httpd.conf.d/httpd.admin -D$OS";
 $service_launchers{'httpd.portal'} = "%1\$s -f $conf_dir/httpd.conf.d/httpd.portal -D$OS";
-$service_launchers{'httpd.proxy'} = "%1\$s -f $conf_dir/httpd.conf.d/httpd.proxy -D$OS";
 
 $service_launchers{'pfdetect'} = "%1\$s -d -p $install_dir/var/alert &";
 $service_launchers{'pfmon'} = '%1$s -d &';
+$service_launchers{'pfcache'} = '%1$s -d &';
 $service_launchers{'pfdhcplistener'} = 'sudo %1$s -i %2$s -d &';
 $service_launchers{'pfsetvlan'} = '%1$s -d &';
 # TODO the following join on @listen_ints will cause problems with dynamic config reloading
@@ -93,7 +93,6 @@ $service_launchers{'dhcpd'} = "sudo %1\$s -lf $var_dir/dhcpd/dhcpd.leases -cf $g
 $service_launchers{'pfdns'} = '%1$s -d &';
 $service_launchers{'snmptrapd'} = "%1\$s -n -c $generated_conf_dir/snmptrapd.conf -C -A -Lf $install_dir/logs/snmptrapd.log -p $install_dir/var/run/snmptrapd.pid -On";
 $service_launchers{'radiusd'} = "sudo %1\$s -d $install_dir/raddb/";
-$service_launchers{'memcached'} = "%1\$s -d -p 11211 -u pf -m 64 -c 1024 -P $install_dir/var/run/memcached.pid";
 
 # TODO $monitor_int will cause problems with dynamic config reloading
 if ( isenabled( $Config{'trapping'}{'detection'} ) && $monitor_int && $Config{'trapping'}{'detection_engine'} eq 'snort' ) {
@@ -130,7 +129,7 @@ sub service_ctl {
     $daemon =~ /^(.*)$/;
     $daemon = $1;
 
-    $logger->info("$daemon $service $action");
+    $logger->info("$service $action");
     if ( $binary =~ /^($ALL_BINARIES_RE)$/ ) {
         $binary = $1;
     CASE: {
@@ -154,7 +153,6 @@ sub service_ctl {
                         'httpd' => \&generate_httpd_conf,
                         'httpd.webservices' => \&generate_httpd_conf,
                         'httpd.portal' => \&generate_httpd_conf,
-                        'httpd.proxy' => \&generate_httpd_conf,
                         'httpd.admin' => \&generate_httpd_conf,
                         'radiusd' => \&generate_radiusd_conf,
                         'snmptrapd' => \&generate_snmptrapd_conf
@@ -169,7 +167,7 @@ sub service_ctl {
                 # valid daemon and flags are set
                 if (grep({ $daemon eq $_ } @ALL_SERVICES) && defined($service_launchers{$daemon})) {
 
-                    if ( !( ($daemon eq 'pfdhcplistener' ) || ($daemon eq 'httpd') || ($daemon eq 'httpd.webservices') || ($daemon eq 'httpd.admin') || ($daemon eq 'httpd.portal') || ($daemon eq 'httpd.proxy') ) ) {
+                    if ( !( ($daemon eq 'pfdhcplistener' ) || ($daemon eq 'httpd') || ($daemon eq 'httpd.webservices') || ($daemon eq 'httpd.admin') || ($daemon eq 'httpd.portal') ) ) {
                         if ( $daemon eq 'dhcpd' ) {
 
                             # create var/dhcpd/dhcpd.leases if it doesn't exist
@@ -185,24 +183,69 @@ sub service_ctl {
                             pf::freeradius::freeradius_populate_nas_config(\%pf::ConfigStore::SwitchOverlay::SwitchConfig);
 
                         }
-                        return launchService($daemon,$service);
+                        if ($service_launchers{$daemon} =~ /^(.+)$/) {
+                            my $cmd_line = sprintf($1, $service);
+                            $logger->info("Starting $daemon with '$cmd_line'");
+                            # FIXME lame taint-mode bypass
+                            if ($service_launchers{$daemon} =~ /^(.+)$/) {
+                                my $launch = $1;
+                                my $cmd_line = sprintf($launch, $service);
+                                $logger->info("Starting $daemon with '$cmd_line'");
+                                # FIXME lame taint-mode bypass
+                                if ($cmd_line =~ /^(.+)$/) {
+                                    $cmd_line = $1;
+                                    my $t0 = Time::HiRes::time();
+                                    my $return_value = system($cmd_line);
+                                    my $elapsed = Time::HiRes::time() - $t0;
+                                    $logger->info(sprintf("Daemon %s took %.3f seconds to start.", $daemon, $elapsed));
+                                    return $return_value;
+                                }
+                            }
+                        }
                     } elsif ($daemon eq 'pfdhcplistener') {
                         if ( isenabled( $Config{'network'}{'dhcpdetector'} ) ) {
                             # putting interfaces to run listener on in hash so that
                             # only one listener per interface will ever run
                             my %interfaces = map { $_ => $TRUE } @listen_ints, @dhcplistener_ints;
                             foreach my $dev (keys %interfaces) {
-                                launchService($daemon,$service, $dev);
+                                my $cmd_line = sprintf($service_launchers{$daemon}, $service, $dev);
+                                # FIXME lame taint-mode bypass
+                                if ($cmd_line =~ /^(.+)$/) {
+                                    $cmd_line = $1;
+                                    $logger->info( "Starting $daemon with '$cmd_line'" );
+                                    my $t0 = Time::HiRes::time();
+                                    system($cmd_line);
+                                    my $elapsed = Time::HiRes::time() - $t0;
+                                    $logger->info(sprintf("Daemon %s took %.3f seconds to start.", $daemon, $elapsed));
+                                }
                             }
                             return 1;
                         }
                     } elsif ($daemon eq 'httpd') {
                         foreach my $serv (@APACHE_SERVICES) {
                             next if ($serv eq "httpd.admin");
-                            service_ctl($serv,"start");
+                            my $cmd_line = sprintf($service_launchers{$serv}, $service);
+                            # FIXME lame taint-mode bypass
+                            if ($cmd_line =~ /^(.+)$/) {
+                                $cmd_line = $1;
+                                $logger->info( "Starting $daemon with '$cmd_line'" );
+                                my $t0 = Time::HiRes::time();
+                                system($cmd_line);
+                                my $elapsed = Time::HiRes::time() - $t0;
+                                $logger->info(sprintf("Daemon $daemon took %.3f seconds to start.", $elapsed));
+                            }
                         }
                     } elsif ($daemon =~ /httpd\.(.*)/) {
-                        launchService($daemon,$service);
+                        my $conf = $1;
+                        my $cmd_line =  sprintf($service_launchers{$daemon}, $service);
+                        if ($cmd_line =~ /^(.+)$/) {
+                            $cmd_line = $1;
+                            $logger->info( "Starting $daemon with '$cmd_line'" );
+                            my $t0 = Time::HiRes::time();
+                            system($cmd_line);
+                            my $elapsed = Time::HiRes::time() - $t0;
+                            $logger->info(sprintf("Daemon $daemon took %.3f seconds to start.", $elapsed));
+                        }
                     }
                 }
                 last CASE;
@@ -210,10 +253,83 @@ sub service_ctl {
             $action eq "stop" && do {
                 if ($daemon eq 'httpd') {
                     foreach my $serv (@APACHE_SERVICES) {
-                        stopService($serv,$binary);
+                        my $pid = service_ctl( $serv, "status" );
+                        if ($pid) {
+                            my $cmd = "sudo /bin/kill -TERM $pid";
+
+                            #Untaint cmd
+                            $cmd =~ /^(.*)$/;
+                            $cmd = $1;
+                            $logger->info("Stopping $daemon with '$cmd'");
+                            eval { `$cmd`; };
+                            if ($@) {
+                                $logger->logcroak("Can't stop $daemon with '$cmd': $@");
+                                return;
+                            }
+
+                            if ( $service =~ /(dhcpd)/) {
+                                manage_Static_Route();
+                            }
+
+                            my $maxWait = 10;
+                            my $curWait = 0;
+                            my $ppt;
+                            my $proc = 0;
+                            while ( ( ( $curWait < $maxWait )
+                                && ( service_ctl( $daemon, "status" ) ne "0" ) ) && defined($proc) )
+                            {
+                                $ppt = new Proc::ProcessTable;
+                                $proc = first { defined($_) } grep { $_->pid == $pid } @{ $ppt->table };
+                                $logger->info("Waiting for $binary to stop ");
+                                sleep(2);
+                                $curWait++;
+                            }
+                            if ( -e $install_dir . "/var/run/$binary.pid" ) {
+                                $logger->info("Removing $install_dir/var/run/$binary.pid");
+                                unlink( $install_dir . "/var/run/$binary.pid" );
+                            }
+                        }
                     }
                 } else {
-                    stopService($daemon,$binary);
+                    my $pids = service_ctl( $daemon, "status" );
+                    my @pid = split(' ', $pids);
+                    foreach my $pid (@pid) {
+                        if ($pid) {
+                            my $cmd = "sudo /bin/kill -TERM $pid";
+
+                            #Untaint cmd
+                            $cmd =~ /^(.*)$/;
+                            $cmd = $1;
+                            $logger->info("Stopping $daemon with '$cmd'");
+                            eval { `$cmd`; };
+                            if ($@) {
+                                $logger->logcroak("Can't stop $daemon with '$cmd': $@");
+                                return;
+                            }
+
+                            if ( $service =~ /(dhcpd)/) {
+                                manage_Static_Route();
+                            }
+
+                            my $maxWait = 10;
+                            my $curWait = 0;
+                            my $ppt;
+                            my $proc = 0;
+                            while ( ( ( $curWait < $maxWait )
+                                && ( service_ctl( $daemon, "status" ) ne "0" ) ) && defined($proc) )
+                            {
+                                $ppt = new Proc::ProcessTable;
+                                $proc = first { defined($_) } grep { $_->pid == $pid } @{ $ppt->table };
+                                $logger->info("Waiting for $binary to stop ");
+                                sleep(2);
+                                $curWait++;
+                            }
+                            if ( -e $install_dir . "/var/run/$binary.pid" ) {
+                                $logger->info("Removing $install_dir/var/run/$binary.pid");
+                                unlink( $install_dir . "/var/run/$binary.pid" );
+                            }
+                        }
+                    }
                 }
                 last CASE;
             };
@@ -228,18 +344,44 @@ sub service_ctl {
             $action eq "status" && do {
                 my $pid;
                 # -x: this causes the program to also return process id's of shells running the named scripts.
-                if (!( ($binary eq "pfdhcplistener") || ($daemon eq "httpd") || ($daemon eq "snort") ) ) {
-                    return getPidFromFile($daemon,$binary);
+                if (!( ($binary eq "pfdhcplistener") || ($daemon eq "httpd") || ($daemon eq "httpd.webservices") || ($daemon eq "httpd.admin") || ($daemon eq "httpd.portal") || ($daemon eq "snort") ) ) {
+                    my $pid_file = "$install_dir/var/run/$daemon.pid";
+                    if (-e $pid_file) {
+                        chomp( $pid = `cat $pid_file`);
+                    }
+                    $pid = 0 if ( !$pid );
+                    $logger->info("pidof -x $binary returned $pid");
+                    if($pid && $pid =~ /^(.*)$/) {
+                        $pid = $1;
+                        unless (kill( 0,$pid)) {
+                            $pid = 0;
+                            $logger->info("removing stale pid file $pid_file");
+                            unlink $pid_file;
+                        }
+                    }
+
+                    return ($pid);
                 }
                 # Handle the pfdhcplistener case. Grab exact interfaces where pfdhcplistner should run,
                 # explicitly check process names per interface then return 0 to force a restart if one is missing.
                 elsif ($binary eq "pfdhcplistener") {
-                    my %int_to_pid;
+                    my %int_to_pid = map { $_ => $FALSE } @listen_ints, @dhcplistener_ints;
+                    $logger->debug( "Expecting $binary on interfaces: " . join(", ", keys %int_to_pid) );
+
                     my $dead_flag;
-                    foreach my $interface ( @listen_ints, @dhcplistener_ints ) {
-                        my $pid = getPidFromFile("pfdhcplistener_${interface}",$binary);
-                        $int_to_pid{$interface} = $pid;
-                        $dead_flag = $TRUE unless $pid;
+                    foreach my $interface (keys %int_to_pid) {
+                        # -f: whole command line, -x: exact match (fixes #1545)
+                        chomp($int_to_pid{$interface} = `pgrep -f -x "$binary: listening on $interface"`);
+                        # if one check returned a false value ('' is false) then we failed the check
+                        if (!$int_to_pid{$interface}) {
+                            $dead_flag = $TRUE;
+                            $logger->debug( "Missing $binary process on interface: $interface" );
+                        }
+                        # more than one running instance: fail
+                        elsif ($int_to_pid{$interface} =~ /\n/) {
+                            $logger->debug( "More than one $binary process running on interface: $interface" );
+                            $dead_flag = $TRUE;
+                        }
                     }
 
                     # outputs: a list of interface => pid, ... helpful for sysadmin and forensics
@@ -252,16 +394,37 @@ sub service_ctl {
                     # result, you can have more than one pfdhcplistener per interface ?!
                     # return 0 if ($dead_flag);
                     $pid = join(" ", values %int_to_pid);
-                    if ( $quick  || !$dead_flag) {
-                        return ($pid);
+                    if ( $pid =~ m/\d+/) {
+                        return $pid;
                     } else {
-                        return (0);
+                        return 0;
                     }
+                }
+                elsif ($daemon =~ "httpd(.*)") {
+                    $pid = 0;
+                    if (-e "$install_dir/var/run/$daemon.pid") {
+                        chomp( $pid = `cat $install_dir/var/run/$daemon.pid`);
+                        my $ppt = new Proc::ProcessTable;
+                        my $proc = first { defined($_) } grep { $_->pid == $pid } @{ $ppt->table };
+                        if (!defined($proc)) {
+                            unlink( $install_dir . "/var/run/$binary.pid" );
+                            return(0);
+                        }
+                    }
+                    return ($pid);
                 }
                 elsif ($daemon =~ "snort") {
                     $pid = 0;
                     if (defined $monitor_int) {
-                        $pid = getPidFromFile("${daemon}_${monitor_int}.pid",$binary);
+                        if (-e "$install_dir/var/run/${daemon}_${monitor_int}.pid") {
+                            chomp( $pid = `cat $install_dir/var/run/${daemon}_${monitor_int}.pid`);
+                            my $ppt = new Proc::ProcessTable;
+                            my $proc = first { defined($_) } grep { defined $_ && $_->pid == $pid } @{ $ppt->table };
+                            if (!defined($proc)) {
+                                unlink( $install_dir . "/var/run/${daemon}_${monitor_int}.pid" );
+                                return(0);
+                            }
+                        }
                     }
                     return ($pid);
                 }
@@ -305,9 +468,6 @@ sub service_list {
             push @finalServiceList, $service
                 if ( (is_inline_enforcement_enabled() || is_vlan_enforcement_enabled())
                     && isenabled($Config{'services'}{'pfdns'}) );
-        } elsif ( $service eq "httpd.proxy" ) {
-            push @finalServiceList, $service
-                if ( isenabled($Config{'trapping'}{'interception_proxy'}) );
         }
         elsif ( $service eq 'pfdhcplistener' ) {
             push @finalServiceList, $service if ( isenabled($Config{'network'}{'dhcpdetector'}) );
@@ -342,108 +502,6 @@ sub manage_Static_Route {
             my @out = pf_run($cmd);
         }
     }
-}
-
-=item * read_violations_conf
-
-=cut
-
-sub read_violations_conf {
-    pf::violation_config::readViolationConfigFile();
-    return 1;
-}
-
-sub getPidFromFile {
-    my ($daemon,$binary) = @_;
-    my $logger = Log::Log4perl::get_logger('pf::services');
-    my $pid = 0;
-    my $pid_file = "$install_dir/var/run/$daemon.pid";
-    if (-e $pid_file) {
-        eval {chomp( $pid = read_file($pid_file) );};
-    }
-    $pid = 0 unless $pid;
-    $logger->info("pidof -x $binary returned $pid");
-    if($pid && $pid =~ /^(.*)$/) {
-        $pid = $1;
-        unless (kill( 0,$pid)) {
-            $pid = 0;
-            $logger->info("removing stale pid file $pid_file");
-            unlink $pid_file;
-        }
-    }
-
-    return ($pid);
-}
-
-sub launchService {
-    my ($daemon,@launcher_args) = @_;
-    my $launcher = $service_launchers{$daemon};
-    @launcher_args = map { /^(.+)$/;$1 } @launcher_args;
-    if ($launcher) {
-        $launcher =~ /^(.*)$/;
-        $launcher = $1;
-        my $logger = Log::Log4perl::get_logger('pf::services');
-        my $cmd_line = sprintf($launcher, @launcher_args);
-        $logger->info("Starting $daemon with '$cmd_line'");
-        if ($cmd_line =~ /^(.+)$/) {
-            $cmd_line = $1;
-            my $t0 = Time::HiRes::time();
-            my $return_value = system($cmd_line);
-            my $elapsed = Time::HiRes::time() - $t0;
-            $logger->info(sprintf("Daemon %s took %.3f seconds to start.", $daemon, $elapsed));
-            return $return_value;
-        }
-    }
-    return;
-}
-
-
-sub stopService {
-    my ($service,$binary) = @_;
-    my $pids = service_ctl( $service, "status", 1 );
-    my $logger = Log::Log4perl::get_logger('pf::services');
-    $pids =~ /^(.*)$/;
-    $pids = $1;
-    my @pid = split(' ', $pids);
-    foreach my $pid (@pid) {
-        if ($pid) {
-            $logger->info("Sending TERM signal to $service with pid $pid");
-            my $count = kill 'TERM',$pid;
-            unless ($count) {
-                $logger->logcroak("Can't a TERM signal to $service with pid $pid ");
-                return;
-            }
-
-            if ( $service =~ /(dhcpd)/) {
-                manage_Static_Route();
-            }
-            my $pid_file = "$install_dir/var/run/$binary.pid";
-            if ( waitToShutdown($service, $pid) &&  -e $pid_file) {
-                $logger->info("Removing $pid_file");
-                unlink($pid_file);
-            }
-        }
-    }
-
-}
-
-sub waitToShutdown {
-    my ($service, $pid) = @_;
-    my $logger = Log::Log4perl::get_logger('pf::services');
-    my $maxWait = 10;
-    my $curWait = 0;
-    my $ppt;
-    my $proc = 0;
-    while ( ( ( $curWait < $maxWait )
-        && ( service_ctl( $service, "status" ) ne "0" ) ) && defined($proc) )
-    {
-        $ppt = new Proc::ProcessTable;
-        $proc = first { $_->pid == $pid } @{ $ppt->table };
-        $logger->info("Waiting for $service to stop ");
-        sleep(2);
-        $curWait++;
-    }
-    return defined $proc;
 }
 
 

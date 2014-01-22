@@ -286,6 +286,11 @@ sub generate_login_page {
         $portalSession->stash->{'guest_allowed'} = 0;
     }
 
+    if (isenabled($portalSession->getProfile->getBillingEngine)) {
+        $portalSession->stash->{'billing_allowed'} = 1;
+    } else {
+        $portalSession->stash->{'billing_allowed'} = 0;
+    }
     $portalSession->stash->{'txt_auth_error'} = i18n($err) if (defined($err));
 
     # Return login
@@ -617,15 +622,16 @@ sub validate_form {
 =cut
 
 sub web_user_authenticate {
-    my ( $portalSession ) = @_;
+    my ( $portalSession ,$username, $password) = @_;
     my $logger = Log::Log4perl::get_logger('pf::web');
     $logger->trace("authentication attempt");
 
     my $session = $portalSession->getSession();
     my @sources = ($portalSession->getProfile->getInternalSources, $portalSession->getProfile->getExclusiveSources);
-    my $username = $portalSession->cgi->param("username");
-    my $password = $portalSession->cgi->param("password");
-
+    if (!defined($username)) {
+        $username = $portalSession->cgi->param("username");
+        $password = $portalSession->cgi->param("password");
+    }
     # validate login and password
     my ($return, $message, $source_id) = pf::authentication::authenticate($username, $password, @sources);
 

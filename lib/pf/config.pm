@@ -38,13 +38,13 @@ use Try::Tiny;
 use File::Which;
 use Socket;
 use List::MoreUtils qw(any);
+use Time::Local;
 
 # Categorized by feature, pay attention when modifying
 our (
     @listen_ints, @dhcplistener_ints, @ha_ints, $monitor_int,
     @internal_nets, @routed_isolation_nets, @routed_registration_nets, @inline_nets, @external_nets,
     @inline_enforcement_nets, @vlan_enforcement_nets, $management_network,
-    %guest_self_registration,
 #pf.conf.default variables
     %Default_Config, $cached_pf_default_config,
 #pf.conf variables
@@ -77,7 +77,6 @@ BEGIN {
         @listen_ints @dhcplistener_ints @ha_ints $monitor_int
         @internal_nets @routed_isolation_nets @routed_registration_nets @inline_nets $management_network @external_nets
         @inline_enforcement_nets @vlan_enforcement_nets
-        %guest_self_registration
         $IPTABLES_MARK_UNREG $IPTABLES_MARK_REG $IPTABLES_MARK_ISOLATION
         $IPSET_VERSION %mark_type_to_str %mark_type
         $MAC $PORT $SSID $ALWAYS
@@ -99,7 +98,7 @@ BEGIN {
         $SELFREG_MODE_EMAIL $SELFREG_MODE_SMS $SELFREG_MODE_SPONSOR $SELFREG_MODE_GOOGLE $SELFREG_MODE_FACEBOOK $SELFREG_MODE_GITHUB $SELFREG_MODE_NULL
         %CAPTIVE_PORTAL
         $HTTP $HTTPS
-        normalize_time $TIME_MODIFIER_RE $ACCT_TIME_MODIFIER_RE
+        normalize_time $TIME_MODIFIER_RE $ACCT_TIME_MODIFIER_RE $DEADLINE_UNIT access_duration
         $BANDWIDTH_DIRECTION_RE $BANDWIDTH_UNITS_RE
         is_vlan_enforcement_enabled is_inline_enforcement_enabled
         is_in_list
@@ -346,6 +345,7 @@ my $cache_inline_enforcement_enabled;
 # html/admin/common/helpers.inc's get_time_units_for_dropdown and get_time_regexp()
 our $TIME_MODIFIER_RE = qr/[smhDWMY]/;
 our $ACCT_TIME_MODIFIER_RE = qr/[DWMY]/;
+our $DEADLINE_UNIT = qr/[RF]/;
 
 # Bandwdith accounting values
 our $BANDWIDTH_DIRECTION_RE = qr/IN|OUT|TOT/;
@@ -460,11 +460,25 @@ sub readPfConfigFiles {
     # load default and override by local config (most common case)
     $cached_pf_default_config = pf::config::cached->new(
                 -file => $default_config_file,
-                -onreload => [ 'reload_pf_default_config' =>  sub {
-                    my ($config) = @_;
-                    $config->toHash(\%Default_Config);
-                    $config->cleanupWhitespace(\%Default_Config);
-                }]
+                -onfilereload => [
+                    onfile_pf_defaults_reload => sub {
+                        my ( $config, $name ) = @_;
+                        $config->toHash(\%Default_Config);
+                        $config->cleanupWhitespace(\%Default_Config);
+                        $config->cacheForData->set( "Default_Config", \%Default_Config );
+                    },
+                ],
+                -oncachereload => [
+                    oncache_pf_defaults_reload => sub {
+                        my ( $config, $name ) = @_;
+                        my $data = $config->fromCacheForDataUntainted("Default_Config");
+                        if($data) {
+                            %Default_Config = %$data;
+                        } else {
+                            $config->_callFileReloadCallbacks();
+                        }
+                    },
+                ],
     );
 
     if ( -e $default_config_file || -e $config_file ) {
@@ -472,10 +486,32 @@ sub readPfConfigFiles {
             -file   => $config_file,
             -import => $cached_pf_default_config,
             -allowempty => 1,
-            -onreload => [ 'reload_pf_config' =>  sub {
+            -onfilereload => [
+                onfile_pf_reload => sub {
+                    my ( $config, $name ) = @_;
+                    $config->toHash(\%Config);
+                    $config->cleanupWhitespace(\%Config);
+                    $config->cacheForData->set( "Config", \%Config );
+                },
+            ],
+            -oncachereload => [
+                oncache_pf_defaults_reload => sub {
+                    my ( $config, $name ) = @_;
+                    my $data = $config->fromCacheForDataUntainted("Config");
+                    if($data) {
+                        %Config = %$data;
+                    } else {
+                        $config->_callFileReloadCallbacks();
+                    }
+                },
+            ],
+            -onpostreload => [ 'reload_pf_config' =>  sub {
                 my ($config) = @_;
-                $config->toHash(\%Config);
-                $config->cleanupWhitespace(\%Config);
+                #clearing older interfaces infor
+                $monitor_int = $management_network = '';
+                @listen_ints = @dhcplistener_ints = @ha_ints =
+                  @internal_nets = @external_nets =
+                  @inline_enforcement_nets = @vlan_enforcement_nets = ();
 
                 my @time_values = grep { my $t = $Doc_Config{$_}{type}; defined $t && $t eq 'time' } keys %Doc_Config;
 
@@ -591,16 +627,20 @@ sub readProfileConfigFile {
     $cached_profiles_config = pf::config::cached->new(
             -file => $profiles_config_file,
             -allowempty => 1,
+            -default => 'default',
             -onreload => [ 'reload_profile_config' => sub {
                 my ($config,$name) = @_;
                 $config->toHash(\%Profiles_Config);
                 $config->cleanupWhitespace(\%Profiles_Config);
+                my $default_description = $Profiles_Config{'default'}{'description'};
                 while (my ($profile_id, $profile) = each %Profiles_Config) {
-                    $profile->{'filter'} = [split(/\s*,\s*/, $profile->{'filter'} || "")];
+                    $profile->{'description'} = '' if $profile_id ne 'default' && $profile->{'description'} eq $default_description;
+                    foreach my $field (qw(locale mandatory_fields sources filter) ) {
+                        $profile->{$field} = [split(/\s*,\s*/, $profile->{$field} || '')];
+                    }
                     foreach my $filter (@{$profile->{'filter'}}) {
                         $Profile_Filters{$filter} = $profile_id;
                     }
-                    $profile->{'sources'} = [split(/\s*,\s*/, $profile->{'sources'} || "")];
                 }
             }]
     );
@@ -618,6 +658,7 @@ sub readNetworkConfigFile {
             my ($config) = @_;
             $config->toHash(\%ConfigNetworks);
             $config->cleanupWhitespace(\%ConfigNetworks);
+            @routed_isolation_nets = @routed_registration_nets = @inline_nets = ();
             foreach my $network ( $config->Sections ) {
 
                 # populate routed nets variables
@@ -684,7 +725,7 @@ sub normalize_time {
         return ($date);
 
     } else {
-        my ( $num, $modifier ) = $date =~ /^(\d+)($TIME_MODIFIER_RE)$/i or return (0);
+        my ( $num, $modifier ) = $date =~ /^(\d+)($TIME_MODIFIER_RE)/ or return (0);
 
         if ( $modifier eq "s" ) { return ($num);
         } elsif ( $modifier eq "m" ) { return ( $num * 60 );
@@ -694,6 +735,152 @@ sub normalize_time {
         } elsif ( $modifier eq "M" ) { return ( $num * 30 * 24 * 60 * 60 );
         } elsif ( $modifier eq "Y" ) { return ( $num * 365 * 24 * 60 * 60 );
         }
+    }
+}
+
+=item access_duration
+
+Calculate the unregdate from from specific trigger.
+
+Returns a formatted date (YYYY-MM-DD HH:MM:SS).
+
+=cut
+
+sub access_duration {
+    my $trigger = shift;
+    my $refdate = shift || time;
+    if ( $trigger =~ /^(\d+)($TIME_MODIFIER_RE)$/ ) {
+        # absolute value with respect to the reference date
+        # ex: access_duration(1W, 2001-01-01 12:00, 2001-08-01 12:00)
+        return POSIX::strftime("%Y-%m-%d %H:%M:%S", localtime($refdate + normalize_time($trigger)));
+    }
+    elsif ($trigger =~ /^(\d+)($TIME_MODIFIER_RE)($DEADLINE_UNIT)([-+])(\d+)($TIME_MODIFIER_RE)$/) {
+        # we match the beginning of the period
+        my ($tvalue,$modifier,$advance_type,$sign,$delta_value,$delta_type) = ($1,$2,$3,$4,$5,$6);
+        my $delta = normalize_time($delta_value.$delta_type);
+        if ($sign eq "-") {
+            $delta *= -1;
+        }
+        if ($advance_type eq 'R') { # relative
+            # ex: access_duration(1WR+1D, 2001-01-01 12:00, 2001-08-02 00:00) (week starts on Monday)
+            return POSIX::strftime("%Y-%m-%d %H:%M:%S",
+                                   localtime( start_date($modifier, $refdate) + duration($tvalue.$modifier, $refdate) + $delta ));
+        }
+        elsif ($advance_type eq 'F') { # fixed
+            # ex: access_duration(1WF+1D, 2001-01-01 12:00, 2001-09-01 00:00)
+            my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime($refdate);
+            my $today_sec = ($hour * 3600) + ($min * 60) + $sec;
+            return POSIX::strftime("%Y-%m-%d %H:%M:%S", localtime( ($refdate + normalize_time($tvalue.$modifier)) - $today_sec + $delta ));
+        }
+        else {
+            return $FALSE;
+        }
+    }
+}
+
+=item start_date
+
+Calculate the beginning of the period.
+
+=over
+
+=item The beginning of a day is at midnight
+
+=item The beginning of the week is on Monday at midnight
+
+=item The beginning of the month is on the first at midnight
+
+=item The beginning of the year is on Januaray 1st at midnight
+
+=back
+
+Returns the number of seconds since the Epoch.
+
+=cut
+
+sub start_date {
+    my $date = shift;
+    my $refdate = shift || time;
+
+    my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime($refdate);
+    my ($modifier) = $date =~ /^($TIME_MODIFIER_RE)$/ or return (0);
+    if ( $modifier eq "D" ) {
+        return ($refdate - (($hour * 3600) + ($min * 60) + $sec));
+    } elsif ( $modifier eq "W" ) {
+        if ($wday eq '0') {
+           $wday = 6;
+        } else {
+           $wday = ($wday -1);
+        }
+        return ($refdate - (($wday * 86400) + ($hour * 3600) + ($min * 60) + $sec));
+    } elsif ( $modifier eq "M" ) {
+        return (mktime(0,0,0,1,$mon,$year));
+    } elsif ( $modifier eq "Y" ) {
+        return (mktime(0,0,0,1,0,$year));
+    } elsif ( $modifier eq "h" ) {
+        return ($refdate - (($min * 60) + $sec));
+    } elsif ( $modifier eq "m" ) {
+        return ($refdate - $sec);
+    }
+
+    return $refdate;
+}
+
+=item duration
+
+Calculate the number of seconds to reach the end of the period from the beginning
+of the period.
+
+=over
+
+=item Example: duration(1D, 2001-01-02 12:00:00) returns 1 * 24 * 60 * 60
+
+=item Example: duration(2W, 2001-01-02 12:00:00) returns 2 * 7 * 24 * 60 * 60
+
+=item Example: duration(2M, 2001-01-02 12:00:00) returns (31+28) * 24 * 60 * 60
+
+=back
+
+=cut
+
+sub duration {
+    my $date = shift;
+    my $refdate = shift || time;
+
+    my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime($refdate);
+    my ($num, $modifier) = $date =~ /^(\d+)($TIME_MODIFIER_RE)$/ or return (0);
+    if ($modifier eq "D") {
+        return ($num * 86400);
+    } elsif ($modifier eq "W") {
+        return ($num * 604800);
+    } elsif ($modifier eq "M") {
+        # We have to calculate the number of days in the next month(s)
+        my $days_month = 0;
+        while ($num != 0) {
+            if ($mon eq 11) {
+                $mon = 0;
+                $year ++;
+            }
+            my $next_month = timelocal(0, 0, 0, 1, $mon + 1 , $year);
+            $days_month += (localtime($next_month - 86400))[3];
+            $mon ++;
+            $num --;
+        }
+        return ($days_month * 86400);
+    } elsif ($modifier eq "Y") {
+        # We have to calculate the number of days in the next year(s)
+        my $days_year = 0;
+        $year = $year + 1900;
+        while ($num != 0) {
+            if ((($year & 3) == 0) && (($year % 100 != 0) || ($year % 400 == 0))) {
+                $days_year += 366;
+            } else {
+                $days_year += 365;
+            }
+            $num --;
+            $year ++;
+        }
+        return ($days_year * 86400);
     }
 }
 

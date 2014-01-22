@@ -224,6 +224,8 @@ sub accounting {
     if ($isStop || $isUpdate) {
         # On accounting stop/update, check the usage duration of the node
         my ($nas_port_type, $switch_mac , $switch_ip, $eap_type, $mac, $port, $user_name, $nas_port_id, $source_ip) = $this->_parseRequest($radius_request);
+        #my ($nas_port_type, $switch_ip, $eap_type, $mac, $port, $user_name) = $this->_parseRequest($radius_request);
+
         if ($mac && $user_name) {
             my $session_time = int $radius_request->{'Acct-Session-Time'};
             if ($session_time > 0) {
@@ -233,10 +235,10 @@ sub accounting {
                     $timeleft = 0 if ($timeleft < 0);
                     # Only update the node table on a Stop
                     if ($isStop && node_modify($mac, ('timeleft' => $timeleft))) {
-                        $logger->info("Session stopped for $mac: duration was $session_time secs ($timeleft secs left)");
+                        $logger->info("Session stopped for ($mac): duration was $session_time secs ($timeleft secs left)");
                     }
                     elsif ($isUpdate) {
-                        $logger->info("Session status for $mac: duration is $session_time secs ($timeleft secs left)");
+                        $logger->info("Session status for ($mac): duration is $session_time secs ($timeleft secs left)");
                     }
                     if ($timeleft == 0) {
                         violation_add($mac, $RADIUS::EXPIRATION_VID);

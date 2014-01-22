@@ -56,6 +56,7 @@ use pf::util;
 our @authentication_sources = ();
 our %authentication_lookup;
 our $cached_authentication_config;
+our %guest_self_registration;
 
 BEGIN {
     use Exporter ();
@@ -71,6 +72,7 @@ BEGIN {
             getAllAuthenticationSources
             deleteAuthenticationSource
             writeAuthenticationConfigFile
+            %guest_self_registration
        );
     @EXPORT_OK =
       qw(
@@ -178,7 +180,7 @@ sub readAuthenticationConfigFile {
                     # Parse rules
                     foreach my $rule_id ( $config->GroupMembers($source_id) ) {
 
-                        my ($id) = $rule_id =~ m/$source_id rule (\w+)/;
+                        my ($id) = $rule_id =~ m/$source_id rule (\S+)$/;
                         my $current_rule = pf::Authentication::Rule->new({match => $Rules::ANY, id => $id});
 
                         foreach my $parameter ( $config->Parameters($rule_id) ) {
@@ -212,17 +214,17 @@ sub readAuthenticationConfigFile {
                     push(@authentication_sources, $current_source);
                     $authentication_lookup{$source_id} = $current_source;
                 }
-                $config->cache->set("authentication_sources",\@authentication_sources);
+                $config->cacheForData->set("authentication_sources",\@authentication_sources);
             }],
             -oncachereload => [
                 on_cache_authentication_reload => sub {
                     my ($config, $name) = @_;
-                    my $authentication_sources_ref = $config->fromCacheUntainted("authentication_sources");
+                    my $authentication_sources_ref = $config->fromCacheForDataUntainted("authentication_sources");
                     if( defined($authentication_sources_ref) ) {
                         @authentication_sources = @$authentication_sources_ref;
                         %authentication_lookup = map { $_->id => $_ } @authentication_sources;
                     } else {
-                        $config->doCallbacks(1,0);
+                        $config->_callFileReloadCallbacks();
                     }
                 },
             ],
@@ -468,7 +470,7 @@ sub authenticate {
         @sources = @authentication_sources;
     }
 
-    $logger->debug("Authenticating '$username' from sources ".join(', ', map { $_->id } @sources));
+    $logger->debug("Authenticating '$username' from source(s) ".join(', ', map { $_->id } @sources));
 
     foreach my $current_source (@sources) {
         my ($result, $message);
@@ -515,10 +517,10 @@ sub match {
     if (defined $action && defined $actions) {
         my $found_action = first { $_->type eq $action } @{$actions};
         if (defined $found_action) {
-            $logger->debug("Returning '".$found_action->value."' for action $action on source ". $source->id);
+            $logger->debug("[".$source->id."] Returning '".$found_action->value."' for action $action for username ".$params->{'username'});
             return $found_action->value
         }
-        $logger->debug("Params don't match rules for action $action on source " . $source->id);
+        $logger->debug("[".$source->id."] Params don't match rules for action $action for parameters ".join(", ", map { "$_ => $params->{$_}" } keys %$params));
         return undef;
     }
 
@@ -526,7 +528,7 @@ sub match {
         $logger->debug("No source matches action $action");
     } elsif (defined $source) {
         $actions ||= [];
-        $logger->debug("Returning actions ".join(', ', map { $_->type." = ".$_->value } @$actions ) . " for source " . $source->id);
+        $logger->debug("[".$source->id."] Returning actions ".join(', ', map { $_->type." = ".$_->value } @$actions ));
     }
 
     return $actions;

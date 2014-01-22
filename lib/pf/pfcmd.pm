@@ -275,7 +275,7 @@ sub parseCommandLine {
                                        ( all ) | $pid_re
                                    )
                                  $ }xms,
-        'reload'          => qr{ ^ ( fingerprints | violations ) $  }xms,
+        'reload'          => qr{ ^ ( fingerprints ) $  }xms,
         'report'          => qr{ ^ (?: #for grouping only
                                      ( active | inactive | openviolations
                                        | os | osclass | registered | statics | ssid
@@ -309,7 +309,7 @@ sub parseCommandLine {
                                      ( \d+ )
                                    )
                                  $ }xms,
-        'service'         => qr{ ^ ( dhcpd | httpd | pfdns | pfdetect
+        'service'         => qr{ ^ ( dhcpd | httpd | pfdns | pfdetect | pfcache
                                      | pf | pfdhcplistener | pfmon
                                      | pfsetvlan | radiusd | snmptrapd
                                      | snort | suricata | httpd\.webservices | httpd\.admin | httpd\.portal | memcached)

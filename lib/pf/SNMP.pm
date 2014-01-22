@@ -376,7 +376,7 @@ sub connectRead {
             . " read connection to $this->{_id}" );
     if ( $this->{_SNMPVersion} eq '3' ) {
         ( $this->{_sessionRead}, $this->{_error} ) = Net::SNMP->session(
-            -hostname     => $this->{_ip},
+            -hostname     => $this->{_controllerIp} || $this->{_ip},
             -version      => $this->{_SNMPVersion},
             -username     => $this->{_SNMPUserNameRead},
             -timeout      => 2,
@@ -388,7 +388,7 @@ sub connectRead {
         );
     } else {
         ( $this->{_sessionRead}, $this->{_error} ) = Net::SNMP->session(
-            -hostname  => $this->{_ip},
+            -hostname  => $this->{_controllerIp} || $this->{_ip},
             -version   => $this->{_SNMPVersion},
             -timeout   => 2,
             -retries   => 1,
@@ -453,7 +453,7 @@ sub connectWriteTo {
     $logger->debug( "opening SNMP v" . $this->{_SNMPVersion} . " write connection to $ip" );
     if ( $this->{_SNMPVersion} eq '3' ) {
         ( $this->{$sessionKey}, $this->{_error} ) = Net::SNMP->session(
-            -hostname     => $ip,
+            -hostname     => $this->{_controllerIp} || $ip,
             -port         => $port,
             -version      => $this->{_SNMPVersion},
             -timeout      => 2,
@@ -466,7 +466,7 @@ sub connectWriteTo {
         );
     } else {
         ( $this->{$sessionKey}, $this->{_error} ) = Net::SNMP->session(
-            -hostname  => $ip,
+            -hostname  => $this->{_controllerIp} || $ip,
             -port      => $port,
             -version   => $this->{_SNMPVersion},
             -timeout   => 2,

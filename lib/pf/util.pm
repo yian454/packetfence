@@ -149,7 +149,7 @@ Returns an untainted string with MAC in format: xx:xx:xx:xx:xx:xx
 
 sub clean_mac {
     my ($mac) = @_;
-    return (0) if ( !$mac );
+    return undef if ( !$mac );
 
     # trim garbage
     $mac =~ s/[\s\-\.:]//g;
@@ -219,14 +219,14 @@ our $VALID_PF_MAC_REGEX = qr/^[0-9a-f]{2}(:[0-9a-f]{2}){5}$/;
 sub valid_mac {
     my ($mac) = @_;
     my $logger = Log::Log4perl::get_logger('pf::util');
-    if ( $mac !~ $VALID_MAC_REGEX) {
-        $logger->debug("invalid MAC: $mac");
-        return (0);
+    if ( !defined ($mac) || $mac !~ $VALID_MAC_REGEX) {
+        $logger->debug( defined $mac ? "invalid MAC: $mac" : "undefined mac");
+        return undef;
     }
     $mac = clean_mac($mac);
     if( !$mac || $mac =~ $NON_VALID_MAC_REGEX || $mac !~ $VALID_PF_MAC_REGEX) {
         $logger->debug("invalid MAC: " . ($mac?$mac:"empty"));
-        return (0);
+        return undef;
     } else {
         return (1);
     }

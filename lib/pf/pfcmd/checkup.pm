@@ -23,6 +23,7 @@ use pf::violation_config;
 use pf::util;
 use pf::services;
 use pf::trigger;
+use pf::authentication;
 use NetAddr::IP;
 
 use lib $conf_dir;
@@ -746,7 +747,6 @@ Checking for violations configurations
 
 sub violations {
 
-    pf::violation_config::readViolationConfigFile();
     my $deprecated_disable_seen = $FALSE;
     foreach my $violation ( keys %Violation_Config ) {
 
@@ -959,7 +959,7 @@ Make sure only one external authentication source is selected for each type.
 # TODO: We might want to check if specified auth module(s) are valid... to do so, we'll have to separate the auth thing from the extension check.
 sub portal_profiles {
 
-    my $profile_params = qr/(?:filter|logo|guest_self_reg|guest_modes|template_path|billing_engine|description|sources)/;
+    my $profile_params = qr/(?:filter|logo|guest_self_reg|guest_modes|template_path|billing_engine|description|sources|redirecturl|always_use_redirecturl|mandatory_fields)/;
 
     foreach my $portal_profile ( $cached_profiles_config->Sections) {
 

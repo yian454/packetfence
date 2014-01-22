@@ -165,7 +165,7 @@ sub process_pkt {
     my ( $user_data, $hdr, $pkt ) = @_;
     listen_dhcp( $pkt, $user_data );
     #reload all cached configs after each iteration
-    pf::config::cached::ReloadConfigs();
+    pf::config::cached::RefreshConfigs();
 }
 
 sub listen_dhcp {
@@ -235,7 +235,7 @@ sub listen_dhcp {
 
     # FIXME throtle this
     # There is activity from that mac, call node wakeup
-    node_mac_wakeup($dhcp->{'chaddr'});
+    # node_mac_wakeup($dhcp->{'chaddr'});
 
     # opcode 1 = request, opcode 2 = reply
 

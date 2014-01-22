@@ -20,6 +20,7 @@ use Try::Tiny;
 use pf::config;
 use pf::trigger qw(trigger_delete_all parse_triggers);
 use pf::class qw(class_merge);
+use pf::db;
 
 our (%Violation_Config, $cached_violations_config);
 
@@ -28,15 +29,20 @@ BEGIN {
     our ( @ISA, @EXPORT );
     @ISA = qw(Exporter);
     # Categorized by feature, pay attention when modifying
-    @EXPORT = qw(%Violation_Config $cached_violations_config readViolationConfigFile);
+    @EXPORT = qw(%Violation_Config $cached_violations_config);
 }
 
 sub fileReloadViolationConfig {
     my ($config,$name) = @_;
-    my $logger = get_logger();
-    $logger->info("called $name");
     $config->toHash(\%Violation_Config);
     $config->cleanupWhitespace(\%Violation_Config);
+    $config->cacheForData->set("Violation_Config",\%Violation_Config);
+}
+
+sub loadViolationsIntoDb {
+    my ($config,$name) = @_;
+    my $logger = get_logger();
+    return unless db_ping;
     trigger_delete_all();
     while(my ($violation,$data) = each %Violation_Config) {
         # parse triggers if they exist
@@ -81,38 +87,25 @@ sub fileReloadViolationConfig {
             $triggers_ref
         );
     }
-    $config->cache->set("Violation_Config",\%Violation_Config);
 }
 
-sub readViolationConfigFile {
-    unless ($cached_violations_config) {
-        $cached_violations_config = pf::config::cached->new(
-            -file => $violations_config_file,
-            -allowempty => 1,
-            -default => 'defaults',
-            -onfilereload => [file_reload_violation_config => \&fileReloadViolationConfig ],
-            -oncachereload => [
-                cache_reload_violation_config => sub {
-                    my ($config,$name) = @_;
-                    my $data = $config->fromCacheUntainted("Violation_Config");
-                    if($data) {
-                        %Violation_Config = %$data;
-                    } else {
-                        fileReloadViolationConfig($config,$name);
-                    }
-                }
-            ],
-        );
-        if ( scalar(@Config::IniFiles::errors) ) {
-            my $logger = get_logger();
-            $logger->error( "Error reading $violations_config_file " .  join( "\n", @Config::IniFiles::errors ) . "\n" );
-            return 0;
+$cached_violations_config = pf::config::cached->new(
+    -file => $violations_config_file,
+    -allowempty => 1,
+    -default => 'defaults',
+    -onfilereload => [file_reload_violation_config => \&fileReloadViolationConfig ],
+    -oncachereload => [
+        cache_reload_violation_config => sub {
+            my ($config,$name) = @_;
+            my $data = $config->fromCacheForDataUntainted("Violation_Config");
+            if($data) {
+                %Violation_Config = %$data;
+            } else {
+                $config->_callFileReloadCallbacks();
+            }
         }
-    } else {
-        $cached_violations_config->ReadConfig();
-    }
-    return 1;
-}
+    ],
+);
 
 =head1 AUTHOR
 

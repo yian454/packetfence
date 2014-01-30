@@ -1297,7 +1297,6 @@ sub service {
         print "config files|$command\n";
         require pf::os;
         pf::os::import_dhcp_fingerprints();
-        pf::services::read_violations_conf();
         if(isenabled($Config{services}{iptables}) && $service eq 'pf') {
             print "iptables|$command\n";
             require pf::inline::custom;
@@ -1698,11 +1697,6 @@ sub reload {
         my $fp_total = pf::os::import_dhcp_fingerprints({ force => $TRUE });
         $logger->info("$fp_total DHCP fingerprints reloaded");
         print "$fp_total DHCP fingerprints reloaded\n";
-    } elsif ( $option eq "violations" ) {
-        require pf::services;
-        pf::services::read_violations_conf();
-        $logger->info("Violation classes reloaded");
-        print "Violation classes reloaded\n";
     }
     exit;
 }

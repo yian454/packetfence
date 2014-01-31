@@ -68,6 +68,7 @@ use Date::Parse;
 use File::Basename qw(basename);
 use Log::Log4perl;
 use Try::Tiny;
+use List::MoreUtils qw(any);
 
 use constant INSTALL_DIR => '/usr/local/pf';
 
@@ -1263,16 +1264,18 @@ sub service {
         import pf::pfcmd::checkup;
         #Start httpd.admin anyway for the configurator
         my $nb_running_services = 0;
-        if ( pf::services::service_ctl( "httpd.admin", "status" ) ) {
-            $nb_running_services++;
-            push @alreadyRunningServices, "httpd.admin";
-        }
-        if ( grep( { $_ eq "httpd.admin" } @alreadyRunningServices ) == 1 )
-        {
-            print "httpd.admin|already running\n";
-        } else {
-            pf::services::service_ctl( "httpd.admin", $command );
-            print "httpd.admin|$command\n";
+        foreach my $start_service (qw(pfcache httpd.admin)) {
+            if ( pf::services::service_ctl( $start_service, "status" ) ) {
+                $nb_running_services++;
+                push @alreadyRunningServices, $start_service;
+            }
+            if ( grep( { $_ eq $start_service } @alreadyRunningServices ) == 1 )
+            {
+                print "$start_service|already running\n";
+            } else {
+                pf::services::service_ctl( $start_service, $command );
+                print "$start_service|$command\n";
+            }
         }
         checkup(@services);
         foreach my $tmp (@pf::services::ALL_SERVICES) {
@@ -1307,7 +1310,7 @@ sub service {
     }
 
     foreach my $srv (@services) {
-        next if ( ($srv eq 'httpd.admin') && ($command eq 'start' ) );
+        next if ( ($command eq 'start') && (any { $_ eq $srv} qw(pfcache httpd.admin) ) );
         if (   ( $command eq 'start' )
             && ( grep( { $_ eq $srv } @alreadyRunningServices ) == 1 ) )
         {

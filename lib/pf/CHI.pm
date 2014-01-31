@@ -22,6 +22,8 @@ use pf::file_paths;
 use pf::IniFiles;
 use List::MoreUtils qw(uniq);
 
+BEGIN { umask 2 }
+
 our $chi_config = pf::IniFiles->new( -file => $chi_config_file, -allowempty => 1) or die;
 
 sub chiConfigFromIniFile {
@@ -40,6 +42,10 @@ sub chiConfigFromIniFile {
             if(exists $storage->{$param}) {
                 $storage->{$param} = [split /\s*,\s*/,$storage->{$param}];
             }
+        }
+        #To work around a bug in CHI < 0.58
+        if(exists $storage->{traits} ) {
+            $storage->{param_name} = $storage->{traits};
         }
         foreach my $param (qw(dir_create_mode file_create_mode umask_on_store)) {
             if(exists $storage->{$param}) {

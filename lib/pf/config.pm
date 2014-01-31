@@ -28,7 +28,7 @@ use pf::config::cached;
 use pf::file_paths;
 use Date::Parse;
 use File::Basename qw(basename);
-use File::Spec;
+use File::Spec::Functions;
 use Net::Interface;
 use Net::Netmask;
 use POSIX;
@@ -488,11 +488,50 @@ sub readPfConfigFiles {
             -allowempty => 1,
             -onfilereload => [
                 onfile_pf_reload => sub {
-                    my ( $config, $name ) = @_;
+                    my ($config, $name) = @_;
                     $config->toHash(\%Config);
                     $config->cleanupWhitespace(\%Config);
-                    $config->cacheForData->set( "Config", \%Config );
-                },
+                    my @time_values = grep {
+                        my $t = $Doc_Config{$_}{type};
+                        defined $t && $t eq 'time'
+                    } keys %Doc_Config;
+
+                    # normalize time
+                    foreach my $val (@time_values) {
+                        my ($group, $item) = split(/\./, $val);
+                        $Config{$group}{$item} =
+                          normalize_time($Config{$group}{$item})
+                          if ($Config{$group}{$item});
+                    }
+
+                    # determine absolute paths
+                    foreach my $val ("alerting.log") {
+                        my ($group, $item) = split(/\./, $val);
+                        if (!file_name_is_absolute($Config{$group}{$item})) {
+                            $Config{$group}{$item} =
+                              catfile($log_dir, $Config{$group}{$item});
+                        }
+                    }
+                    $Config{trapping}{passthroughs} = [split(/\s*,\s*/, $Config{trapping}{passthroughs} || '')];
+
+                    my $proxy_passthroughs = [];
+
+                    if (isenabled($Config{'trapping'}{'passthrough'})) {
+                        $proxy_passthroughs = [split( /\s*,\s*/, $Config{trapping}{proxy_passthroughs} || '')];
+                    }
+
+                    push @$proxy_passthroughs, qw(
+                      crl.geotrust.com ocsp.geotrust.com crl.thawte.com ocsp.thawte.com
+                      crl.comodoca.com ocsp.comodoca.com crl.incommon.org ocsp.incommon.org
+                      crl.usertrust.com ocsp.usertrust.com mscrl.microsoft.com crl.microsoft.com
+                      ocsp.apple.com ocsp.digicert.com ocsp.entrust.com srvintl-crl.verisign.com
+                      ocsp.verisign.com ctldl.windowsupdate.com
+                    );
+
+                    $Config{trapping}{proxy_passthroughs} = $proxy_passthroughs;
+
+                    $config->cacheForData->set("Config", \%Config);
+                  },
             ],
             -oncachereload => [
                 oncache_pf_defaults_reload => sub {
@@ -512,26 +551,7 @@ sub readPfConfigFiles {
                 @listen_ints = @dhcplistener_ints = @ha_ints =
                   @internal_nets = @external_nets =
                   @inline_enforcement_nets = @vlan_enforcement_nets = ();
-
-                my @time_values = grep { my $t = $Doc_Config{$_}{type}; defined $t && $t eq 'time' } keys %Doc_Config;
-
-                # normalize time
-                foreach my $val (@time_values ) {
-                    my ( $group, $item ) = split( /\./, $val );
-                    $Config{$group}{$item} = normalize_time($Config{$group}{$item}) if ($Config{$group}{$item});
-                }
-
-                # determine absolute paths
-                foreach my $val ("alerting.log") {
-                    my ( $group, $item ) = split( /\./, $val );
-                    if ( !File::Spec->file_name_is_absolute( $Config{$group}{$item} ) ) {
-                        $Config{$group}{$item} = File::Spec->catfile( $log_dir, $Config{$group}{$item} );
-                    }
-                }
-
-                $fqdn = sprintf("%s.%s",
-                                $Config{'general'}{'hostname'} || $Default_Config{'general'}{'hostname'},
-                                $Config{'general'}{'domain'} || $Default_Config{'general'}{'domain'});
+                $fqdn = sprintf("%s.%s", $Config{'general'}{'hostname'}, $Config{'general'}{'domain'});
 
                 foreach my $interface ( $config->GroupMembers("interface") ) {
                     my $int_obj;
@@ -585,29 +605,6 @@ sub readPfConfigFiles {
                             push @ha_ints, $int;
                         }
                     }
-                }
-                $Config{trapping}{passthroughs} = [split(/\s*,\s*/,$Config{trapping}{passthroughs} || '') ];
-                if (isenabled($Config{'trapping'}{'passthrough'})) {
-                    $Config{trapping}{proxy_passthroughs} = [
-                        split(/\s*,\s*/,$Config{trapping}{proxy_passthroughs} || ''),
-                        qw(
-                            crl.geotrust.com ocsp.geotrust.com crl.thawte.com ocsp.thawte.com
-                            crl.comodoca.com ocsp.comodoca.com crl.incommon.org ocsp.incommon.org
-                            crl.usertrust.com ocsp.usertrust.com mscrl.microsoft.com crl.microsoft.com
-                            ocsp.apple.com ocsp.digicert.com ocsp.entrust.com srvintl-crl.verisign.com
-                            ocsp.verisign.com ctldl.windowsupdate.com
-                        )
-                    ];
-                } else {
-                    $Config{trapping}{proxy_passthroughs} = [
-                        qw(
-                            crl.geotrust.com ocsp.geotrust.com crl.thawte.com ocsp.thawte.com
-                            crl.comodoca.com ocsp.comodoca.com crl.incommon.org ocsp.incommon.org
-                            crl.usertrust.com ocsp.usertrust.com mscrl.microsoft.com crl.microsoft.com
-                            ocsp.apple.com ocsp.digicert.com ocsp.entrust.com srvintl-crl.verisign.com
-                            ocsp.verisign.com ctldl.windowsupdate.com
-                        )
-                    ];
                 }
 
                 _load_captive_portal();

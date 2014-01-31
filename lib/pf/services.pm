@@ -175,13 +175,6 @@ sub service_ctl {
 
                             manage_Static_Route(1);
 
-                        } elsif ( $daemon eq 'radiusd' ) {
-                            my $pid = service_ctl( $daemon, "status" );
-                            # TODO: push all these per-daemon initialization into pf::services::...
-                            require pf::freeradius;
-                            require pf::ConfigStore::SwitchOverlay;
-                            pf::freeradius::freeradius_populate_nas_config(\%pf::ConfigStore::SwitchOverlay::SwitchConfig);
-
                         }
                         if ($service_launchers{$daemon} =~ /^(.+)$/) {
                             my $cmd_line = sprintf($1, $service);

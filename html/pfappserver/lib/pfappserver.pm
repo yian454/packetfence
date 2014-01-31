@@ -207,7 +207,7 @@ sub forms {
 }
 
 before handle_request => sub {
-    pf::config::cached::RefreshConfigs();
+    pf::config::cached::ReloadConfigs();
 };
 
 after finalize => sub {

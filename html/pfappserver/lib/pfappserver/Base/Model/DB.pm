@@ -18,6 +18,7 @@ use namespace::autoclean;
 use pf::config::cached;
 use pf::log;
 use HTTP::Status qw(:constants :is);
+use Module::Load;
 
 BEGIN { extends 'Catalyst::Model'; }
 
@@ -27,7 +28,19 @@ BEGIN { extends 'Catalyst::Model'; }
 
 =cut
 
-has manager => ( is => 'ro', );
+=head 
+
+manager
+
+=cut
+
+has manager => ( is => 'ro', lazy => 1, builder => '_build_manager' );
+
+=head 
+
+=cut
+
+has managerClassName => ( is => 'ro' );
 
 =head2 idKey
 
@@ -54,6 +67,16 @@ The key of the list of items
 has itemsKey => ( is => 'ro', default => 'items' );
 
 =head1 METHODS
+
+=head2 _build_manager 
+
+=cut
+
+sub _build_manager {
+    my ($self) = @_;
+    load $self->managerClassName;
+    return $self->managerClassName;
+}
 
 =head2 readAllIds
 

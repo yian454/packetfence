@@ -25,7 +25,6 @@ use threads;
 
 use pf::log;
 use pf::config;
-use pf::DB;
 
 # Constants
 use constant MAX_RETRIES  => 3;
@@ -48,6 +47,17 @@ BEGIN {
 END {
     $dbh{threads->self->tid}->disconnect() if ($dbh{threads->self->tid});
 }
+
+$DB_Config = $Config{'database'};
+#Adding a config reload callback that will disconnect the database when a change in the db configuration has been found
+$cached_pf_config->addPostReloadCallbacks( 'reload_db_config' => sub {
+    my $new_db_config = $pf::config::Config{'database'};
+    if (grep { $DB_Config->{$_} ne $new_db_config->{$_}  } qw(host port user pass db) ) {
+        db_disconnect();
+    }
+    $DB_Config = $new_db_config;
+});
+
 
 =head1 SUBROUTINES
 
@@ -84,9 +94,16 @@ sub db_connect {
 
     $logger->debug("(Re)Connecting to MySQL (thread id: $tid)");
 
+    my $host = $DB_Config->{'host'};
+    my $port = $DB_Config->{'port'};
+    my $user = $DB_Config->{'user'};
+    my $pass = $DB_Config->{'pass'};
+    my $db   = $DB_Config->{'db'};
+
     # TODO database prepared statements are disabled by default in dbd::mysql
     # we should test with them, see http://search.cpan.org/~capttofu/DBD-mysql-4.013/lib/DBD/mysql.pm#DESCRIPTION
-    $mydbh = pf::DB->new->retain_dbh;
+    $mydbh = DBI->connect( "dbi:mysql:dbname=$db;host=$host;port=$port",
+        $user, $pass, { RaiseError => 0, PrintError => 0 } );
 
     # make sure we have a database handle
     if ($mydbh) {

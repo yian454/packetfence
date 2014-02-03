@@ -14,12 +14,11 @@ pfappserver::Model::Config::Wrix;
 
 use Moose;
 use namespace::autoclean;
-use pf::DB::Wrix::Manager;
 use HTTP::Status qw(:constants is_error is_success);
 
-extends 'pfappserver::Base::Model::DB';
+BEGIN { extends 'pfappserver::Base::Model::DB'; }
 
-has '+manager' => (default => 'pf::DB::Wrix::Manager');
+has '+managerClassName' => (default => 'pf::DB::Wrix::Manager');
 
 =head1 METHODS
 
@@ -32,7 +31,7 @@ Delete an existing item
 sub remove {
     my ($self,$id) = @_;
     if($id eq 'all') {
-        return ($STATUS::INTERNAL_SERVER_ERROR, "Cannot delete this item");
+        return (HTTP_INTERNAL_SERVER_ERROR, "Cannot delete this item");
     }
     return $self->SUPER::remove($id);
 }

@@ -235,6 +235,7 @@ Options:
 sub import_dhcp_fingerprints {
     my ($opts_ref) = @_;
     my $logger = Log::Log4perl::get_logger('pf::os');
+    return 0 unless db_ping;
 
     if (dhcp_fingerprint_count() != 0 && !$opts_ref->{'force'}) {
         $logger->debug("DHCP fingerprints already present in database: Not loading again.");

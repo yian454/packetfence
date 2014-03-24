@@ -896,7 +896,7 @@ sub nodes_maintenance {
 
     my $expire_unreg_query = db_query_execute(NODE, $node_statements, 'node_expire_unreg_field_sql') || return (0);
     while (my $row = $expire_unreg_query->fetchrow_hashref()) {
-        my $currentMac = $row->{mac};
+        my $currentMac = clean_mac($row->{mac});
         pf_run("/usr/local/pf/bin/pfcmd manage deregister $currentMac");
         $logger->info("modified $currentMac from status 'reg' to 'unreg' based on unregdate colum" );
     }

@@ -3354,6 +3354,10 @@ msgstr "Rogue DHCP detection"
 msgid "network.rogueinterval"
 msgstr "Rogue interval"
 
+# conf/documentation.conf
+msgid "network.interfaceSNAT"
+msgstr "SNAT Interface"
+
 # conf/documentation.conf (general.locale options)
 msgid "nl_NL"
 msgstr ""

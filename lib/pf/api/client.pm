@@ -1,13 +1,13 @@
-package pf::api::msgpackclient;
+package pf::api::client;
 
 =head1 NAME
 
-pf::api::msgpackclient
+pf::api::client
 
 =head1 SYNOPSIS
 
-  use pf::api::msgpackclient;
-  my $client = pf::api::msgpackclient->new;
+  use pf::api::client;
+  my $client = pf::api::client->new;
   my @args = $client->call("echo","packet","fence");
 
   $client->notify("echo","packet","fence");
@@ -15,7 +15,7 @@ pf::api::msgpackclient
 
 =head1 DESCRIPTION
 
-  pf::api::msgpackclient is a msgpacket client over http
+  pf::api::client is the base class for the pf http rpc client
 
 =cut
 
@@ -25,7 +25,6 @@ use warnings;
 use pf::config;
 use Log::Log4perl;
 use WWW::Curl::Easy;
-use Data::MessagePack;
 use Moo;
 
 =head1 Attributes
@@ -82,8 +81,10 @@ has port => (is => 'rw', default => sub {$Config{'webservices'}{'port'}} );
 
 has id => (is => 'rw', default => sub {0} );
 
+has content_type => (is => 'rw');
+
 use constant REQUEST => 0;
-use constant RESPONSE => 2;
+use constant RESPONSE => 1;
 use constant NOTIFICATION => 2;
 
 =head1 METHODS
@@ -99,7 +100,7 @@ sub call {
     my ($self,$function,@args) = @_;
     my $response;
     my $curl = $self->curl($function);
-    my $request = $self->build_msgpack_request($function,\@args);
+    my $request = $self->build_request($function,\@args);
     my $response_body;
     $curl->setopt(CURLOPT_POSTFIELDSIZE,length($request));
     $curl->setopt(CURLOPT_POSTFIELDS, $request);
@@ -112,16 +113,38 @@ sub call {
     if ( $curl_return_code == 0 ) {
         my $response_code = $curl->getinfo(CURLINFO_HTTP_CODE);
         if($response_code == 200) {
-            $response = Data::MessagePack->unpack($response_body);
+            $response = $self->decode(\$response_body);
         } else {
-            die "An error occured while processing the MessagePack request return code ($response_code)";
+            die "An error occured while processing the rpc request return code ($response_code)";
         }
     } else {
-        my $msg = "An error occured while sending a MessagePack request: $curl_return_code ".$curl->strerror($curl_return_code)." ".$curl->errbuf;
+        my $msg = "An error occured while sending a rpc request: $curl_return_code ".$curl->strerror($curl_return_code)." ".$curl->errbuf;
         die $msg;
     }
 
-    return @{$response->[3]};
+    return $self->extractValues($response);
+}
+
+=head2 decode
+
+TODO: documention
+
+=cut
+
+sub decode {
+    my ($self) = @_;
+    return ;
+}
+
+=head2 encode
+
+TODO: documention
+
+=cut
+
+sub encode {
+    my ($self) = @_;
+    return ;
 }
 
 =head2 notify
@@ -135,7 +158,7 @@ sub notify {
     my ($self,$function,@args) = @_;
     my $response;
     my $curl = $self->curl($function);
-    my $request = $self->build_msgpack_notification($function,\@args);
+    my $request = $self->build_notification($function,\@args);
     my $response_body;
     $curl->setopt(CURLOPT_POSTFIELDSIZE,length($request));
     $curl->setopt(CURLOPT_POSTFIELDS, $request);
@@ -147,11 +170,11 @@ sub notify {
     # Looking at the results...
     if ( $curl_return_code == 0 ) {
         my $response_code = $curl->getinfo(CURLINFO_HTTP_CODE);
-        if($response_code != 200) {
-            die "An error occured while processing the MessagePack request return code ($response_code)";
+        if($response_code != 204) {
+            die "An error occured while processing the rpc notification request return code ($response_code)";
         }
     } else {
-        my $msg = "An error occured while sending a MessagePack request: $curl_return_code ".$curl->strerror($curl_return_code)." ".$curl->errbuf;
+        my $msg = "An error occured while sending a rpc notification request: $curl_return_code ".$curl->strerror($curl_return_code)." ".$curl->errbuf;
         die $msg;
     }
     return;
@@ -171,7 +194,7 @@ sub curl {
     $curl->setopt(CURLOPT_DNS_USE_GLOBAL_CACHE, 0);
     $curl->setopt(CURLOPT_NOSIGNAL, 1);
     $curl->setopt(CURLOPT_URL, $url);
-    $curl->setopt(CURLOPT_HTTPHEADER, ['Content-Type: application/x-msgpack',"Request: $function"]);
+    $curl->setopt(CURLOPT_HTTPHEADER, ['Content-Type: application/json-rpc',"Request: $function"]);
     if($self->username && $self->password && ($self->proto eq 'https') ) {
         $curl->setopt(CURLOPT_HTTPAUTH, CURLOPT_HTTPAUTH);
         $curl->setopt(CURLOPT_USERNAME, $self->username);
@@ -194,31 +217,24 @@ sub url {
     return "${proto}://${host}:${port}";
 }
 
-=head2 build_msgpack_request
+=head2 build_request
 
-  builds the msgpack request
+  builds the jsonrpc request
 
 =cut
 
-sub build_msgpack_request {
+sub build_request {
     my ($self,$function,$args) = @_;
-    my $id = $self->id;
-    my $request = [REQUEST,$id,$function,$args];
-    $id++;
-    $self->id($id);
-    return Data::MessagePack->pack($request);
 }
 
-=head2 build_msgpack_notification
+=head2 build_notification
 
-  builds the msgpack notification request
+  builds the jsonrpc notification request
 
 =cut
 
-sub build_msgpack_notification {
+sub build_notification {
     my ($self,$function,$args) = @_;
-    my $request = [NOTIFICATION,$function,$args];
-    return Data::MessagePack->pack($request);
 }
 
 

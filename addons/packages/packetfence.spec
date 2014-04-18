@@ -588,6 +588,9 @@ echo "Disabling SELinux..."
 setenforce 0
 sed -i 's/^SELINUX=.*/SELINUX=disabled/g' /etc/selinux/config
 
+# Create a symbolic link for pfdhcplistener
+ln -s /usr/local/pf/sbin/pfdhcpd /usr/local/pf/sbin/pfdhcplistener
+
 #Starting Packetfence.
 echo "Starting Packetfence..."
 #removing old cache

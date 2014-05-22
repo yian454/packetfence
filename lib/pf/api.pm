@@ -134,6 +134,7 @@ sub desAssociate {
 
     my ($switchdeauthMethod, $deauthTechniques) = $switch->deauthTechniques($switch->{'_deauthMethod'},$postdata{'connection_type'});
 
+    $logger->info("DeAssociating mac $postdata{'mac'} on switch " . $switch->{_id});
     $deauthTechniques->($switch,$postdata{'mac'});
 }
 

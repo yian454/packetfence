@@ -335,17 +335,29 @@ sub getNormalVlan {
     $logger->debug("Trying to determine VLAN from role.");
 
     my $role = "";
+    my $profile = pf::Portal::ProfileFactory->instantiate($mac);
+    my @sources = ($profile->getInternalSources, $profile->getExclusiveSources);
+    my $source = pf::authentication::getAuthenticationSource($node_info->{'source'});
 
+    
     # Try MAC_AUTH, then other EAP methods and finally anything else.
     if ( $connection_type && ($connection_type & $WIRED_MAC_AUTH) == $WIRED_MAC_AUTH ) {
-        $logger->info("Connection type is WIRED_MAC_AUTH. Getting role from node_info" );
-        $role = $node_info->{'category'};
+        if (grep { $_->{id} eq $source->{id} } @sources) {
+            $logger->info("Connection type is WIRED_MAC_AUTH. Getting role from node_info" );
+            $role = $node_info->{'category'};
+        } else {
+            $role = 'registration';
+            my %info = (
+                'status' => 'unreg',
+                'autoreg' => 'no',
+            );
+            node_modify($mac,%info);
+        }
     } elsif ( $connection_type && ($connection_type & $WIRELESS_MAC_AUTH) == $WIRELESS_MAC_AUTH ) {
         $logger->info("Connection type is WIRELESS_MAC_AUTH. Getting role from node_info" );
         $role = $node_info->{'category'};
 
-
-        if (isenabled($node_info->{'autoreg'})) {
+        if (isenabled($node_info->{'autoreg'}) || !(grep { $_->{id} eq $source->{id} } @sources)) {
             $logger->info("Device is comming from a secure connection and has been auto registered, we unreg it and forward it to the portal" );
             $role = 'registration';
             my %info = (
@@ -380,14 +392,7 @@ sub getNormalVlan {
                 $value = &pf::authentication::match([@sources], $params, $Actions::SET_UNREG_DATE);
             }
             if (defined $value) {
-                my %info = (
-                    'unregdate' => $value,
-                    'category' => $role,
-                    'autoreg' => 'yes',
-                );
-                if (defined $role) {
-                    %info = (%info, (category => $role));
-                }
+                my %info = (unregdate => $value);
                 node_modify($mac,%info);
             }
         }
@@ -615,4 +620,3 @@ USA.
 # vim: set shiftwidth=4:
 # vim: set expandtab:
 # vim: set backspace=indent,eol,start:
-

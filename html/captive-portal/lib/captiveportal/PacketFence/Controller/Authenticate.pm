@@ -234,6 +234,7 @@ sub postAuthentication : Private {
         $logger->trace("Got unregdate $value for username $pid");
         $info->{unregdate} = $value;
     }
+    $info->{source} = $source_id;
     $c->stash->{info} = $info;
 }
 

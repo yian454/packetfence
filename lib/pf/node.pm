@@ -54,6 +54,7 @@ BEGIN {
         node_register
         node_deregister
         node_is_unregistered
+        node_unregistered
         nodes_maintenance
         nodes_unregistered
         nodes_registered
@@ -112,9 +113,9 @@ sub node_db_prepare {
             detect_date, regdate, unregdate, lastskip,
             user_agent, computername, dhcp_fingerprint,
             last_arp, last_dhcp,
-            notes, autoreg, sessionid
+            notes, autoreg, sessionid, source
         ) VALUES (
-            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
         )
     ]);
 
@@ -126,7 +127,7 @@ sub node_db_prepare {
             detect_date=?, regdate=?, unregdate=?, lastskip=?, time_balance=?, bandwidth_balance=?,
             user_agent=?, computername=?, dhcp_fingerprint=?,
             last_arp=?, last_dhcp=?,
-            notes=?, autoreg=?, sessionid=? 
+            notes=?, autoreg=?, sessionid=?, source=? 
         WHERE mac=?
     ]);
 
@@ -136,7 +137,7 @@ sub node_db_prepare {
             detect_date, regdate, unregdate, lastskip, time_balance, bandwidth_balance,
             user_agent, computername, dhcp_fingerprint,
             last_arp, last_dhcp,
-            node.notes, autoreg, sessionid 
+            node.notes, autoreg, sessionid, source
         FROM node
             LEFT JOIN node_category USING (category_id)
         WHERE mac = ?
@@ -148,7 +149,7 @@ sub node_db_prepare {
             detect_date, regdate, unregdate, lastskip,
             user_agent, computername, IFNULL(os_class.description, ' ') as dhcp_fingerprint,
             last_arp, last_dhcp,
-            node.notes, autoreg, sessionid 
+            node.notes, autoreg, sessionid, source  
         FROM node
             LEFT JOIN node_category USING (category_id)
             LEFT JOIN dhcp_fingerprint ON node.dhcp_fingerprint=dhcp_fingerprint.fingerprint
@@ -183,7 +184,7 @@ sub node_db_prepare {
             node.detect_date, node.regdate, node.unregdate, node.lastskip, node.time_balance, node.bandwidth_balance,
             node.user_agent, node.computername, node.dhcp_fingerprint,
             node.last_arp, node.last_dhcp,
-            node.notes, node.autoreg, node.sessionid,
+            node.notes, node.autoreg, node.sessionid, node.source, 
             UNIX_TIMESTAMP(node.regdate) AS regdate_timestamp,
             UNIX_TIMESTAMP(node.unregdate) AS unregdate_timestamp
         FROM node
@@ -266,7 +267,7 @@ sub node_db_prepare {
     $node_statements->{'node_expire_lastdhcp_sql'} = get_db_handle()->prepare(
         qq [ select mac from node where unix_timestamp(last_dhcp) < (unix_timestamp(now()) - ?) and last_dhcp !=0 and status="$STATUS_UNREGISTERED" ]);
 
-    $node_statements->{'node_is_unregistered_sql'} = get_db_handle()->prepare(qq[
+    $node_statements->{'node_unregistered_sql'} = get_db_handle()->prepare(qq[
         SELECT mac, pid, voip, bypass_vlan, status,
             detect_date, regdate, unregdate, lastskip,
             user_agent, computername, dhcp_fingerprint,
@@ -408,7 +409,7 @@ sub node_add {
         'detect_date', 'regdate', 'unregdate', 'lastskip',
         'user_agent', 'computername', 'dhcp_fingerprint',
         'last_arp', 'last_dhcp',
-        'notes', 'autoreg', 'sessionid'
+        'notes', 'autoreg', 'sessionid', 'source'
     ) {
         $data{$field} = "" if ( !defined $data{$field} );
     }
@@ -428,7 +429,7 @@ sub node_add {
         $data{detect_date}, $data{regdate}, $data{unregdate}, $data{lastskip},
         $data{user_agent}, $data{computername}, $data{dhcp_fingerprint},
         $data{last_arp}, $data{last_dhcp},
-        $data{notes}, $data{autoreg}, $data{sessionid}
+        $data{notes}, $data{autoreg}, $data{sessionid}, $data{source}
     ) || return (0);
     return (1);
 }
@@ -784,7 +785,7 @@ sub node_modify {
         $existing->{lastskip}, $existing->{time_balance}, $existing->{bandwidth_balance},
         $existing->{user_agent}, $existing->{computername}, $existing->{dhcp_fingerprint},
         $existing->{last_arp}, $existing->{last_dhcp},
-        $existing->{notes},$existing->{autoreg},$existing->{sessionid},
+        $existing->{notes},$existing->{autoreg},$existing->{sessionid},$existing->{source},
         $mac
     );
     return ($sth->rows);
@@ -905,10 +906,10 @@ sub nodes_maintenance {
 
 # check to see is $mac is registered
 #
-sub node_is_unregistered {
+sub node_unregistered {
     my ($mac) = @_;
 
-    my $query = db_query_execute(NODE, $node_statements, 'node_is_unregistered_sql', $mac) || return (0);
+    my $query = db_query_execute(NODE, $node_statements, 'node_unregistered_sql', $mac) || return (0);
     my $ref = $query->fetchrow_hashref();
     $query->finish();
     return ($ref);
@@ -1217,4 +1218,3 @@ USA.
 =cut
 
 1;
-

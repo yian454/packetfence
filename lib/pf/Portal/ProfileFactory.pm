@@ -52,6 +52,9 @@ sub instantiate {
     my $node_info = node_view($mac) || {};
     $node_info = { %$options, %$node_info } ;
 
+    my $has_machine_auth = $node_info->{last_connection_type} eq 'Wireless-802.11-EAP' && $node_info->{last_dot1x_username} =~ /^host\//;
+    return $self->_from_profile('MachineAuth') if $has_machine_auth && exists $Profiles_Config{'MachineAuth'};
+
     my @filter_ids = (
         ( map {
                 my $val = $node_info->{ "last_$_" };

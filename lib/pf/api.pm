@@ -105,7 +105,7 @@ sub ReAssignVlan {
     my ($class, %postdata )  = @_;
     my $logger = Log::Log4perl->get_logger('pf::WebAPI');
 
-    if ( not defined( $postdata{'connection_type'} ) { 
+    if ( not defined( $postdata{'connection_type'} )) { 
         $logger->error("Connection type is unknown. Could not reassign VLAN."); 
         return;
     }
@@ -141,7 +141,6 @@ sub desAssociate {
 sub firewall {
     my ($class, %postdata )  = @_;
     my $logger = Log::Log4perl->get_logger('pf::WebAPI');
-    use Data::Dumper; $logger->warn("Dumping my args: ". Dumper \@_);
 
     # verify if firewall rule is ok
     my $inline = new pf::inline::custom();
@@ -152,7 +151,7 @@ sub firewall {
 # Handle connection types $WIRED_SNMP_TRAPS
 sub _reassignSNMPConnections {
     my ( $switch, $mac, $ifIndex, $connection_type ) = @_;
-
+    my $logger = pf::log::get_logger();
     # find open non VOIP entries in locationlog. Fail if none found.
     my @locationlog = locationlog_view_open_switchport_no_VoIP( $switch->{_id}, $ifIndex );
     unless ( (@locationlog) && ( scalar(@locationlog) > 0 ) && ( $locationlog[0]->{'mac'} ne '' ) ) {
@@ -184,7 +183,7 @@ sub _reassignSNMPConnections {
     } # end case PORTSEC
     
     $logger->info( "Flipping admin status on switch " . $switch->{_id} . " ifIndex $ifIndex. " );
-    $switch->bouncePort($switch_port);
+    $switch->bouncePort($ifIndex);
 }
  
 sub unreg_node_for_pid {

@@ -132,10 +132,10 @@ sub desAssociate {
 
     my $switch = pf::SwitchFactory->getInstance()->instantiate($postdata{'switch'});
 
-    my ($switchdeauthMethod, $deauthTechniques) = $switch->deauthTechniques($switch->{'_deauthMethod'},$postdata{'connection_type'});
+    my ($switchdeauthMethod, $deauthTechniques) = $switch->deauthTechniques($switch->{'_deauthMethod'});
 
     $logger->info("DeAssociating mac $postdata{'mac'} on switch " . $switch->{_id});
-    $deauthTechniques->($switch,$postdata{'mac'});
+    $switch->$deauthTechniques->($postdata{'mac'});
 }
 
 sub firewall {

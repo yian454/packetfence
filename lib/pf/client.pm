@@ -193,7 +193,8 @@ sub curl {
     $curl->setopt(CURLOPT_DNS_USE_GLOBAL_CACHE, 0);
     $curl->setopt(CURLOPT_NOSIGNAL, 1);
     $curl->setopt(CURLOPT_URL, $url);
-    $curl->setopt(CURLOPT_HTTPHEADER, ['Content-Type: application/json-rpc',"Request: $function"]);
+    my $content_type = $self->content_type;
+    $curl->setopt(CURLOPT_HTTPHEADER, ["Content-Type: $content_type","Request: $function"]);
     if($self->username && $self->password && ($self->proto eq 'https') ) {
         $curl->setopt(CURLOPT_HTTPAUTH, CURLOPT_HTTPAUTH);
         $curl->setopt(CURLOPT_USERNAME, $self->username);

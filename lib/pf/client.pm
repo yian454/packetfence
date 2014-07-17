@@ -22,8 +22,7 @@ pf::client
 use strict;
 use warnings;
 
-use pf::config;
-use pf::log;
+use Log::Log4perl qw(:easy);
 use WWW::Curl::Easy;
 use Moo;
 
@@ -35,7 +34,7 @@ use Moo;
 
 =cut
 
-has username => ( is => 'rw', default => sub {$Config{'webservices'}{'username'}} );
+has username => ( is => 'rw' );
 
 =head2 password
 
@@ -43,7 +42,7 @@ has username => ( is => 'rw', default => sub {$Config{'webservices'}{'username'}
 
 =cut
 
-has password => ( is => 'rw', default => sub {$Config{'webservices'}{'password'}} );
+has password => ( is => 'rw' );
 
 =head2 proto
 
@@ -52,7 +51,7 @@ has password => ( is => 'rw', default => sub {$Config{'webservices'}{'password'}
 
 =cut
 
-has proto => ( is => 'rw', default => sub {$Config{'webservices'}{'proto'}} );
+has proto => ( is => 'rw', default => sub { "http" } );
 
 =head2 host
 
@@ -61,7 +60,7 @@ has proto => ( is => 'rw', default => sub {$Config{'webservices'}{'proto'}} );
 
 =cut
 
-has host => ( is => 'rw', default => sub {$Config{'webservices'}{'host'}} );
+has host => ( is => 'rw', default => sub { '127.0.0.1' } );
 
 =head2 port
 
@@ -70,7 +69,7 @@ has host => ( is => 'rw', default => sub {$Config{'webservices'}{'host'}} );
 
 =cut
 
-has port => (is => 'rw', default => sub {$Config{'webservices'}{'port'}} );
+has port => (is => 'rw', default => sub { 9090 } );
 
 =head2 id
 
@@ -171,10 +170,10 @@ sub notify {
     if ( $curl_return_code == 0 ) {
         my $response_code = $curl->getinfo(CURLINFO_HTTP_CODE);
         if($response_code != 204) {
-            get_logger->error( "An error occured while processing the JSONRPC request return code ($response_code)");
+            ERROR( "An error occured while processing the JSONRPC request return code ($response_code)");
         }
     } else {
-        get_logger->error("An error occured while sending a JSONRPC request: $curl_return_code ".$curl->strerror($curl_return_code)." ".$curl->errbuf);
+        ERROR("An error occured while sending a JSONRPC request: $curl_return_code ".$curl->strerror($curl_return_code)." ".$curl->errbuf);
     }
     return;
 }

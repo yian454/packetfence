@@ -99,6 +99,7 @@ Requires: mysql, mysql-server, perl(DBD::mysql)
 Requires: perl >= 5.8.8
 # replaces the need for perl-suidperl which was deprecated in perl 5.12 (Fedora 14)
 Requires(pre): %{real_name}-pfcmd-suid
+Requires(pre): %{real_name}-client-lib
 Requires: perl(Bit::Vector)
 Requires: perl(CGI::Session), perl(CGI::Session::Driver::chi) >= 1.0.3, perl(JSON)
 Requires: perl(Apache2::Request)
@@ -890,6 +891,9 @@ fi
 %config(noreplace)      /usr/local/pf/lib/pf/soh/custom.pm
 %config(noreplace)      /usr/local/pf/lib/pf/vlan/custom.pm
 %config(noreplace)      /usr/local/pf/lib/pf/web/custom.pm
+%exclude                /usr/local/pf/lib/pf/client
+%exclude                /usr/local/pf/lib/pf/client.pm
+%exclude                /usr/local/pf/lib/pf/client/*
 %dir                    /usr/local/pf/logs
 # logfiles
 %ghost                  %logdir/packetfence.log

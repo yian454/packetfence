@@ -88,6 +88,12 @@ install: build
 	#Configurator integration
 	install -d -m0700 $(CURDIR)/debian/packetfence/etc/init.d
 	install -d -m0700 $(CURDIR)/debian/packetfence/etc/default
+	#PacketFence client lib
+	install -d -m0770 $(CURDIR)/debian/packetfence-client-lib$(PREFIX)/$(NAME)/lib/pf/client
+	install -m0770 lib/pf/client.pm $(CURDIR)/debian/packetfence-client-lib$(PREFIX)/$(NAME)/lib/pf/client.pm
+	install -m0770 lib/pf/client.pm $(CURDIR)/debian/packetfence-client-lib$(PREFIX)/$(NAME)/lib/pf/client/jsonrpc.pm
+	install -m0770 lib/pf/client.pm $(CURDIR)/debian/packetfence-client-lib$(PREFIX)/$(NAME)/lib/pf/client/msgpack.pm
+	install -m0770 lib/pf/client.pm $(CURDIR)/debian/packetfence-client-lib$(PREFIX)/$(NAME)/lib/pf/client/sereal.pm
 	#PacketFence remote Snort sensor
 	install -d -m0700 $(CURDIR)/debian/packetfence-remote-snort-sensor$(PREFIX)/$(NAME)/conf
 	install -d $(CURDIR)/debian/packetfence-remote-snort-sensor$(PREFIX)/$(NAME)/var

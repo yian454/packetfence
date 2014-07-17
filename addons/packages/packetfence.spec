@@ -273,6 +273,17 @@ as
 * registration-based and scheduled vulnerability scans.
 
 
+%package -n %{real_name}-client-lib
+Group: System Environment/Daemons
+Requires: perl >= 5.8.0, perl(File::Tail), perl(Config::IniFiles), perl(IO::Socket::SSL), perl(XML::Parser), perl(Crypt::SSLeay), perl(LWP::Protocol::https)
+Requires: perl(Moo), perl(Data::MessagePack), perl(WWW::Curl), perl(Sereal), perl(JSON::XS)
+AutoReqProv: 0
+Summary: Packetfence client library
+BuildArch: noarch
+
+%description -n %{real_name}-client-lib
+The %{real_name}-client-lib package contains the libraries needed to communicate with packetfence webservices
+
 %package -n %{real_name}-remote-snort-sensor
 Group: System Environment/Daemons
 Requires: perl >= 5.8.0, perl(File::Tail), perl(Config::IniFiles), perl(IO::Socket::SSL), perl(XML::Parser), perl(Crypt::SSLeay), perl(LWP::Protocol::https)
@@ -952,6 +963,15 @@ fi
 %attr(0755, pf, pf)     /usr/local/pf/sbin/pfdetect_remote
 %dir                    /usr/local/pf/var
 %dir                    /usr/local/pf/var/run
+
+%files -n %{real_name}-client-lib
+%defattr(-, pf, pf)
+%dir                    /usr/local/pf
+%dir                    /usr/local/pf/lib
+%dir                    /usr/local/pf/lib/pf
+%dir                    /usr/local/pf/lib/pf/client
+                        /usr/local/pf/lib/pf/client.pm
+                        /usr/local/pf/lib/pf/client/*
 
 # Remote arp sensor file list
 %files -n %{real_name}-remote-arp-sensor

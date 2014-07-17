@@ -16,7 +16,8 @@ use strict;
 use warnings;
 
 use Log::Log4perl;
-use pf::api::jsonrpcclient;
+use pf::client::jsonrpc;
+use pf::config;
 
 =head1 SUBROUTINES
 
@@ -44,7 +45,7 @@ sub do_sso {
     my ($self, $method, $mac, $ip, $timeout) = @_;
     my $logger = Log::Log4perl::get_logger( ref($self) );
 
-    my $client = pf::api::jsonrpcclient->new;
+    my $client = pf::client::jsonrpc->new($Config{webservices});
 
     my %data = (
        'method'           => $method,

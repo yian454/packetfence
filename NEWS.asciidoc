@@ -23,6 +23,7 @@ New Features
 * Added local account authentication for EAP
 * Added support for unreg date with dynamic year
 * Added external captive portal support for AeroHIVE 
+* Added external captive portal support for Xirrus 
 
 Enhancements
 ++++++++++++

@@ -16,6 +16,7 @@ Version x.y.x released on yyyy-mm-dd
 
 New Features
 ++++++++++++
+* Added a way to reevaluate the access of a node in the admin interface
 
 Enhancements
 ++++++++++++

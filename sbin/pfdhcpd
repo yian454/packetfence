@@ -87,7 +87,6 @@ $PROGRAM_NAME = basename($0);
 my $logger = Log::Log4perl->get_logger( basename($PROGRAM_NAME) );
 
 # init signal handlers
-# If we send a kill -1 then we reload the configuration and recreate the sockets
 POSIX::sigaction(
     &POSIX::SIGHUP,
     POSIX::SigAction->new(
@@ -129,15 +128,16 @@ END {
     deletepid($PROGRAM_NAME) unless $args{h};
 }
 
-my @ip_addr;
 
+my @ip_addr;
 
 my $int;
 
 # Adding to select:
 my $read_set = new IO::Select();
 
-my $keep_int = '';
+my $keep_int;
+
 
 
 =head2 reload_config
@@ -150,7 +150,7 @@ Loaded at startup and when it receive a kill 1.
 sub reload_config {
     $logger->warn("Reload dhcp config");
     pf::config::cached::ReloadConfigs();
-    # Closing the current socket
+    # Closing all the current socket
     foreach $sock_in (@ip_addr) {
         $sock_in->close();
     }
@@ -222,8 +222,8 @@ sub reload_config {
     foreach my $network ( keys %ConfigNetworks ) {
         $lease{$network} = $ConfigNetworks{$network}{'dhcp_start'};
     }
-
 }
+
 
 reload_config;
 

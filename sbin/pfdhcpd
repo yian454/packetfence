@@ -87,6 +87,7 @@ $PROGRAM_NAME = basename($0);
 my $logger = Log::Log4perl->get_logger( basename($PROGRAM_NAME) );
 
 # init signal handlers
+# If we send a kill -1 then we reload the configuration and recreate the sockets
 POSIX::sigaction(
     &POSIX::SIGHUP,
     POSIX::SigAction->new(
@@ -127,7 +128,6 @@ daemonize($PROGRAM_NAME) if ($daemonize);
 END {
     deletepid($PROGRAM_NAME) unless $args{h};
 }
-
 
 my @ip_addr;
 
@@ -204,13 +204,25 @@ sub reload_config {
             $keep_int ='';
         }
     }
-}
 
+    foreach $sock_in (@ip_addr) {
+        $read_set->add($sock_in);
+        $listen_handler{$sock_in} = \&dhcpd_handler;
+        if ($keep_int eq '') {
+            $keep_int = shift @ints;
+            $ethernet_inf{$sock_in} = $keep_int;
+        }
+        else {
+            $ethernet_inf{$sock_in} = $keep_int;
+            $keep_int ='';
+        }
+    }
+    # Keep the last ip send by the server
 
-# Keep the last ip send by the server
+    foreach my $network ( keys %ConfigNetworks ) {
+        $lease{$network} = $ConfigNetworks{$network}{'dhcp_start'};
+    }
 
-foreach my $network ( keys %ConfigNetworks ) {
-    $lease{$network} = $ConfigNetworks{$network}{'dhcp_start'};
 }
 
 reload_config;

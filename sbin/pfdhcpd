@@ -147,6 +147,7 @@ Loaded at startup and when it receive a kill 1.
 
 sub reload_config {
     $logger->warn("Reload dhcp config");
+    $RUNNING = 0;
     pf::config::cached::ReloadConfigs();
     # Closing all the current socket
     foreach $sock_in (@ip_addr) {
@@ -220,6 +221,7 @@ sub reload_config {
     foreach my $network ( keys %ConfigNetworks ) {
         $lease{$network} = $ConfigNetworks{$network}{'dhcp_start'};
     }
+    $RUNNING = 1;
 }
 
 

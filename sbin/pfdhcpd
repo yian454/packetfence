@@ -25,7 +25,6 @@ use IO::Socket::INET;
 use Net::DHCP::Packet;
 use Net::DHCP::Constants;
 use NetAddr::IP;
-use Tie::Hash::Expire;
 use Net::Ping;
 use List::MoreUtils qw(uniq);
 use Readonly;
@@ -90,7 +89,7 @@ my $logger = Log::Log4perl->get_logger( basename($PROGRAM_NAME) );
 POSIX::sigaction(
     &POSIX::SIGHUP,
     POSIX::SigAction->new(
-        'normal_sighandler', POSIX::SigSet->new(), &POSIX::SA_NODEFER
+        'reload_config', POSIX::SigSet->new(), &POSIX::SA_NODEFER
     )
 ) or $logger->logdie("basename($PROGRAM_NAME): could not set SIGHUP handler: $!");
 
@@ -131,35 +130,71 @@ END {
 
 my @ip_addr;
 
-my @ints = uniq(@listen_ints,@dhcplistener_ints);
 
 my $int;
-foreach $int (@ints) {
-    # Broadcast Socket
-    push @ip_addr, IO::Socket::INET->new(Type => SOCK_DGRAM, Reuse => 1, LocalPort => 67, Proto => 'udp', Broadcast => 1);
-    # Unicast Socket
-    my $if   = IO::Interface::Simple->new($int);
-    push @ip_addr, IO::Socket::INET->new(Type => SOCK_DGRAM, Reuse => 1, LocalPort => 67, LocalAddr => $if->address, Proto => 'udp');
-    # Only bind to a specific interface
-    $ip_addr[-1]->sockopt(25, $int);
-    $ip_addr[-2]->sockopt(25, $int);
-}
 
 # Adding to select:
 my $read_set = new IO::Select();
 
-my $keep_int = '';
+my $keep_int;
 
-foreach $sock_in (@ip_addr) {
-    $read_set->add($sock_in);
-    $listen_handler{$sock_in} = \&dhcpd_handler;
-    if ($keep_int eq '') {
-        $keep_int = shift @ints;
-        $ethernet_inf{$sock_in} = $keep_int;
+
+sub reload_config {
+    $logger->warn("Reload dhcp config");
+    pf::config::cached::ReloadConfigs();
+    # Closing the current socket
+    foreach $sock_in (@ip_addr) {
+        $sock_in->close();
     }
-    else {
-        $ethernet_inf{$sock_in} = $keep_int;
-        $keep_int ='';
+    undef(@ip_addr);
+    undef($keep_int);
+    undef(%ethernet_inf);
+    my @ints = uniq(@listen_ints,@dhcplistener_ints);
+    foreach $int (@ints) {
+        if (defined($Config{"interface $int"}{'haproxyip'})) {
+            my @all_ifs = Net::Interface->interfaces();
+            foreach my $inf (@all_ifs) {
+                if ($inf->name eq $int) {
+                    # these array are ordered the same way, that's why we can assume the following
+                    my @masks = $inf->netmask(AF_INET());
+                    my @addresses = $inf->address(AF_INET());
+                    for my $i (0 .. $#masks) {
+                        if (inet_ntoa($addresses[$i]) eq $Config{"interface $int"}{'haproxyip'}) {
+                            # Broadcast Socket
+                            push @ip_addr, IO::Socket::INET->new(Type => SOCK_DGRAM, Reuse => 1, LocalPort => 67, Proto => 'udp', Broadcast => 1);
+                            # Unicast Socket
+                            my $if   = IO::Interface::Simple->new($int);
+                            push @ip_addr, IO::Socket::INET->new(Type => SOCK_DGRAM, Reuse => 1, LocalPort => 67, LocalAddr => $if->address, Proto => 'udp');
+                            # Only bind to a specific interface
+                            $ip_addr[-1]->sockopt(25, $int);
+                            $ip_addr[-2]->sockopt(25, $int);
+                        }
+                    }
+                }
+            }
+        } else {
+            # Broadcast Socket
+            push @ip_addr, IO::Socket::INET->new(Type => SOCK_DGRAM, Reuse => 1, LocalPort => 67, Proto => 'udp', Broadcast => 1);
+            # Unicast Socket
+            my $if   = IO::Interface::Simple->new($int);
+            push @ip_addr, IO::Socket::INET->new(Type => SOCK_DGRAM, Reuse => 1, LocalPort => 67, LocalAddr => $if->address, Proto => 'udp');
+            # Only bind to a specific interface
+            $ip_addr[-1]->sockopt(25, $int);
+            $ip_addr[-2]->sockopt(25, $int);
+        }
+    }
+
+    foreach $sock_in (@ip_addr) {
+        $read_set->add($sock_in);
+        $listen_handler{$sock_in} = \&dhcpd_handler;
+        if (!defined($keep_int) || ($keep_int eq '')) {
+            $keep_int = shift @ints;
+            $ethernet_inf{$sock_in} = $keep_int;
+        }
+        else {
+            $ethernet_inf{$sock_in} = $keep_int;
+            $keep_int ='';
+        }
     }
 }
 
@@ -170,6 +205,7 @@ foreach my $network ( keys %ConfigNetworks ) {
     $lease{$network} = $ConfigNetworks{$network}{'dhcp_start'};
 }
 
+reload_config;
 
 # entering loop
 while ($RUNNING) {
@@ -244,8 +280,6 @@ sub dhcpd_handler {
                     }
                 }
             }
-             #Open a socket to answer to the client
-             #$sock_answer = IO::Socket::INET->new(Type => SOCK_DGRAM, Reuse => 1, LocalPort => 67, LocalAddr => $if->address, Proto => 'udp', Broadcast => 1,PeerAddr => "$peeraddr:68");
         }
   
         my $dhcpreq = new Net::DHCP::Packet($buf);
@@ -350,7 +384,7 @@ sub do_discover {
             Flags => $dhcpreq->flags(),
             Ciaddr => $dhcpreq->ciaddr(),
             Yiaddr => $ip,
-            Siaddr => $$ip_src->address,
+            Siaddr => $dhcpreq->siaddr(),
             Giaddr => $dhcpreq->giaddr(),
             Chaddr => $dhcpreq->chaddr(),
             DHO_DHCP_MESSAGE_TYPE() => DHCPOFFER()
@@ -362,8 +396,8 @@ sub do_discover {
             $dhcpresp->addOptionValue(DHO_DOMAIN_NAME_SERVERS() , $dhcp_config->{'dns'});
             $dhcpresp->addOptionValue(DHO_DOMAIN_NAME() , $dhcp_config->{'domain-name'});
             $dhcpresp->addOptionValue(DHO_BROADCAST_ADDRESS() , $broadcast->addr);
-            $dhcpresp->addOptionValue(DHO_DHCP_RENEWAL_TIME() , $dhcp_config->{'dhcp_default_lease_time'});
-            $dhcpresp->addOptionValue(DHO_DHCP_REBINDING_TIME() , $dhcp_config->{'dhcp_default_lease_time'});
+            $dhcpresp->addOptionValue(DHO_DHCP_RENEWAL_TIME() , $dhcp_config->{'dhcp_default_lease_time'}/2 );
+            $dhcpresp->addOptionValue(DHO_DHCP_REBINDING_TIME() , $dhcp_config->{'dhcp_default_lease_time'} - 5 );
 
         $logger->debug($dhcpresp->toString());
         if(!defined($listener)) {
@@ -372,8 +406,9 @@ sub do_discover {
 
             my $peer = "$peeraddr:68";
             $peer = "$peeraddr:67" if ($layer3);
+            my $mac = clean_mac( substr( $dhcpreq->chaddr(), 0, 12 ));
             # Create the socket to answer to the client
-            my $sock_in = IO::Socket::INET->new(Type => SOCK_DGRAM, Reuse => 1, LocalPort => 67, LocalAddr => $$ip_src->address, Proto => 'udp', Broadcast => 1,PeerAddr => "$peer");
+            my $sock_in = IO::Socket::INET->new(Type => SOCK_DGRAM, Reuse => 1, LocalPort => 67, LocalAddr => $$ip_src->address, Proto => 'udp', Broadcast => 1, PeerAddr => "$peer");
             # Send the packet to the network
             $sock_in->send($dhcpresp->serialize());
             shutdown($sock_in, 2);
@@ -397,20 +432,17 @@ sub do_request {
         my $net = $$net_addr->network;
 
         # Calculate the ip address
-        my $ip = calc_ip($dhcp_config,$net,$dhcpreq->chaddr,$dhcpreq->getOptionValue(DHO_DHCP_REQUESTED_ADDRESS()));
-
-        # File the lease hash
-        # $lease{$net->addr}{$dhcpreq->chaddr} = $ip; 
+        my $ip = calc_ip($dhcp_config,$net,$dhcpreq->chaddr,$dhcpreq->ciaddr);
 
         # Need the broadcast address
         my $broadcast = $$net_addr->broadcast();
 
         # compare calculated address with requested address
-        if ( defined($dhcpreq->getOptionValue(DHO_DHCP_REQUESTED_ADDRESS())) && ($ip eq $dhcpreq->getOptionValue(DHO_DHCP_REQUESTED_ADDRESS()))) {
+        if ( ( defined($dhcpreq->getOptionValue(DHO_DHCP_REQUESTED_ADDRESS())) && ($ip eq $dhcpreq->getOptionValue(DHO_DHCP_REQUESTED_ADDRESS()))) || $dhcpreq->ciaddr !~ /^0\.0\.0\.0$/)   {
             # address is correct, we send an ACK
 
             # Send to the specific ip (Buggy ?)
-            # $peeraddr = $ip;
+            $peeraddr = $ip;
 
             $dhcpresp = new Net::DHCP::Packet(
                 Comment => $dhcpreq->comment(),
@@ -420,7 +452,7 @@ sub do_request {
                 Flags => $dhcpreq->flags(),
                 Ciaddr => $dhcpreq->ciaddr(),
                 Yiaddr => $ip,
-                Siaddr => $$ip_src->address,
+                Siaddr => $dhcpreq->siaddr(),
                 Giaddr => $dhcpreq->giaddr(),
                 Chaddr => $dhcpreq->chaddr(),
                 DHO_DHCP_MESSAGE_TYPE() => DHCPACK()
@@ -432,8 +464,8 @@ sub do_request {
                 $dhcpresp->addOptionValue(DHO_DOMAIN_NAME_SERVERS() , $dhcp_config->{'dns'});
                 $dhcpresp->addOptionValue(DHO_DOMAIN_NAME() , $dhcp_config->{'domain-name'});
                 $dhcpresp->addOptionValue(DHO_BROADCAST_ADDRESS() , $broadcast->addr);
-                $dhcpresp->addOptionValue(DHO_DHCP_RENEWAL_TIME() , $dhcp_config->{'dhcp_default_lease_time'});
-                $dhcpresp->addOptionValue(DHO_DHCP_REBINDING_TIME() , $dhcp_config->{'dhcp_default_lease_time'});
+                $dhcpresp->addOptionValue(DHO_DHCP_RENEWAL_TIME() , $dhcp_config->{'dhcp_default_lease_time'} / 2);
+                $dhcpresp->addOptionValue(DHO_DHCP_REBINDING_TIME() , $dhcp_config->{'dhcp_default_lease_time'} - 5);
 
         } else {
             # bad request, we send a NAK
@@ -454,6 +486,7 @@ sub do_request {
         }
 
         $logger->debug("Sending ACK/NAK tr=$dhcpresp->comment()");
+        $logger->debug($dhcpreq->toString());
         $logger->debug($dhcpresp->toString());
 
         if (!defined($listener)) {
@@ -611,12 +644,6 @@ sub update_iplog {
     my $oldmac = ip2mac($srcip);
     my $oldip  = mac2ip($srcmac);
 
-    if ( $oldmac && $oldmac ne $srcmac ) {
-        $logger->info(
-            "oldmac ($oldmac) and newmac ($srcmac) are different for $srcip - closing iplog entry"
-        );
-        iplog_close_now($srcip);
-    }
     if ( $oldip && $oldip ne $srcip ) {
         my $view_mac = node_view($srcmac);
         if ($view_mac->{'last_connection_type'} eq $connection_type_to_str{$INLINE}) {
@@ -837,6 +864,7 @@ sub do_inform {
             $dhcpresp->addOptionValue(DHO_BROADCAST_ADDRESS() , $broadcast->addr);
 
         $logger->debug("Sending ACK/NAK tr=$dhcpresp->comment()");
+        $logger->debug($dhcpreq->toString());
         $logger->debug($dhcpresp->toString());
 
         if (!defined($listener)) {
@@ -848,6 +876,7 @@ sub do_inform {
             shutdown($sock_in, 2);
         }
     }
+    #update_iplog( clean_mac( substr( $dhcpreq->chaddr(), 0, 12 ) ), $dhcpreq->ciaddr(), $dhcp_config->{'dhcp_max_lease_time'} + 5);
     $logger->warn("DHCPINFORM from ".clean_mac( substr( $dhcpreq->chaddr(), 0, 12 ) )." (".$dhcpreq->ciaddr().")");
 }
 
@@ -861,5 +890,3 @@ sub normal_sighandler {
     $RUNNING = 0;
     $logger->debug( "$PROGRAM_NAME: caught SIG" . $_[0] . " - terminating" );
 }
-
-

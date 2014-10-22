@@ -441,8 +441,8 @@ sub do_request {
         if ( ( defined($dhcpreq->getOptionValue(DHO_DHCP_REQUESTED_ADDRESS())) && ($ip eq $dhcpreq->getOptionValue(DHO_DHCP_REQUESTED_ADDRESS()))) || $dhcpreq->ciaddr !~ /^0\.0\.0\.0$/)   {
             # address is correct, we send an ACK
 
-            # Send to the specific ip (Buggy ?)
-            $peeraddr = $ip;
+            # Send to the specific ip (iscdhcp send to the ip/mac)
+            # $peeraddr = $ip;
 
             $dhcpresp = new Net::DHCP::Packet(
                 Comment => $dhcpreq->comment(),

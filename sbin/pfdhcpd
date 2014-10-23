@@ -205,18 +205,6 @@ sub reload_config {
         }
     }
 
-    foreach $sock_in (@ip_addr) {
-        $read_set->add($sock_in);
-        $listen_handler{$sock_in} = \&dhcpd_handler;
-        if ($keep_int eq '') {
-            $keep_int = shift @ints;
-            $ethernet_inf{$sock_in} = $keep_int;
-        }
-        else {
-            $ethernet_inf{$sock_in} = $keep_int;
-            $keep_int ='';
-        }
-    }
     # Keep the last ip send by the server
 
     foreach my $network ( keys %ConfigNetworks ) {

@@ -136,8 +136,14 @@ my $int;
 # Adding to select:
 my $read_set = new IO::Select();
 
-my $keep_int = '';
+my $keep_int;
 
+=head2 reload_config
+
+Reload the configuration and the sockets if the network interfaces changed.
+Loaded at startup and when it receive a kill 1.
+
+=cut
 
 sub reload_config {
     $logger->warn("Reload dhcp config");
@@ -151,11 +157,11 @@ sub reload_config {
     undef(%ethernet_inf);
     my @ints = uniq(@listen_ints,@dhcplistener_ints);
     foreach $int (@ints) {
+        # If active/active setup only listen on these interfaces
         if (defined($Config{"interface $int"}{'haproxyip'})) {
             my @all_ifs = Net::Interface->interfaces();
             foreach my $inf (@all_ifs) {
                 if ($inf->name eq $int) {
-                    # these array are ordered the same way, that's why we can assume the following
                     my @masks = $inf->netmask(AF_INET());
                     my @addresses = $inf->address(AF_INET());
                     for my $i (0 .. $#masks) {
@@ -433,6 +439,7 @@ sub do_request {
 
         # Calculate the ip address
         my $ip = calc_ip($dhcp_config,$net,$dhcpreq->chaddr,$dhcpreq->ciaddr);
+        # File the lease hash
 
         # Need the broadcast address
         my $broadcast = $$net_addr->broadcast();
@@ -442,7 +449,7 @@ sub do_request {
             # address is correct, we send an ACK
 
             # Send to the specific ip (iscdhcp send to the ip/mac)
-            # $peeraddr = $ip;
+            #$peeraddr = $ip;
 
             $dhcpresp = new Net::DHCP::Packet(
                 Comment => $dhcpreq->comment(),
@@ -488,7 +495,7 @@ sub do_request {
         $logger->debug("Sending ACK/NAK tr=$dhcpresp->comment()");
         $logger->debug($dhcpreq->toString());
         $logger->debug($dhcpresp->toString());
-
+        $logger->debug($peeraddr);
         if (!defined($listener)) {
             my $sock_in;
             if ($layer3) {
@@ -516,9 +523,9 @@ sub do_request {
 
 sub calc_ip {
     my ($dhcp_config, $net_addr,$mac,$host) = @_;
-    my $ip_return;
+    my $ip_last;
     $mac = clean_mac( substr( $mac, 0, 12 ) );
-
+    my $count = 1;
     my $node_iplog_info = iplog_view_open_mac($mac);
 
     my $ip = new NetAddr::IP::Lite clean_ip($node_iplog_info->{'ip'}) if defined($node_iplog_info->{'ip'});
@@ -528,21 +535,34 @@ sub calc_ip {
         return $node_iplog_info->{'ip'};
     # Send a new address + 1 or the starting ip address of the dhcp zone
     } elsif (defined($lease{$net_addr->addr})) {
-        my $ip = NetAddr::IP->new($lease{$net_addr->addr},$dhcp_config->{'netmask'});
-        my $ip_last = NetAddr::IP->new($dhcp_config->{'dhcp_end'},$dhcp_config->{'netmask'});
-        if (($ip + 1) eq $ip_last) {
-            $ip_return = $dhcp_config->{'dhcp_start'};
-        } else {
-            $ip = $ip + 1;
-            $ip_return = $ip->addr;
+        $ip_last = NetAddr::IP->new($lease{$net_addr->addr},$dhcp_config->{'netmask'});
+        my $broadcast = $ip_last->broadcast();
+        my $network = $ip_last->network();
+        while ($count) {
+            $ip_last = $ip_last + 1;
+            my $mac2 = iplog_view_open_ip($ip_last->addr);
+            if (!defined($mac2)) {
+                $count = 0;
+            } else {
+                $ip_last = $ip_last + 1;
+                if ($ip_last->addr eq $broadcast->addr()) {
+                    $ip_last = $ip_last +2;
+                } elsif ($ip_last->addr eq $network->addr()) {
+                    $ip_last = $ip_last +1;
+                }
+            }
+            if ($ip_last->addr eq $lease{$net_addr->addr}) {
+                $logger->warn("We tested all the ip of the range, wait the dhcp_lease_time and retry");
+                sleep($dhcp_config->{'dhcp_max_lease_time'});
+            }
         }
     } else {
-        $ip_return = $dhcp_config->{'dhcp_start'};
+        $ip_last = $dhcp_config->{'dhcp_start'};
     }
     # Keep the last assign address
-    $lease{$net_addr->addr} = $ip_return;
-    update_iplog( $mac, $ip_return, $dhcp_config->{'dhcp_max_lease_time'} );
-    return $ip_return;
+    $lease{$net_addr->addr} = $ip_last;
+    update_iplog( $mac, $ip_last, $dhcp_config->{'dhcp_max_lease_time'} );
+    return $ip_last;
 }
 
 
@@ -890,3 +910,33 @@ sub normal_sighandler {
     $RUNNING = 0;
     $logger->debug( "$PROGRAM_NAME: caught SIG" . $_[0] . " - terminating" );
 }
+
+=back
+
+=head1 BUGS AND LIMITATIONS
+
+Probably
+
+=head1 COPYRIGHT
+
+Copyright (C) 2007-2014 Inverse inc.
+
+=head1 LICENSE
+
+This program is free software; you can redistribute it and/or
+modify it under the terms of the GNU General Public License
+as published by the Free Software Foundation; either version 2
+of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program; if not, write to the Free Software
+Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301,
+USA.
+
+=cut
+

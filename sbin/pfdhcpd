@@ -113,9 +113,7 @@ my %args;
 getopts( 'dshl:', \%args );
 
 my $daemonize = $args{d};
-
 my $stat = $args{s};
-
 my $listener = $args{l};
 
 pod2usage( -verbose => 1 ) if ( $args{h} );
@@ -129,13 +127,8 @@ END {
 
 
 my @ip_addr;
-
-
 my $int;
-
-# Adding to select:
-my $read_set = new IO::Select();
-
+my $read_set;
 my $keep_int;
 
 =head2 reload_config
@@ -149,12 +142,15 @@ sub reload_config {
     $logger->warn("Reload dhcp config");
     pf::config::cached::ReloadConfigs();
     # Closing the current socket
+    $RUNNING = 0;
     foreach $sock_in (@ip_addr) {
         $sock_in->close();
     }
     undef(@ip_addr);
     undef($keep_int);
     undef(%ethernet_inf);
+    undef($read_set);
+    $read_set = new IO::Select();
     my @ints = uniq(@listen_ints,@dhcplistener_ints);
     foreach $int (@ints) {
         # If active/active setup only listen on these interfaces
@@ -202,6 +198,7 @@ sub reload_config {
             $keep_int ='';
         }
     }
+    $RUNNING = 1;
 }
 
 

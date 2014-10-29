@@ -86,13 +86,13 @@ sub handler {
     # Fetch stats
     my $c = $r->connection();
     my $mac = ip2mac($c->remote_ip());
-    if ( (defined $mac) && $r->subprocess_env("SSLHAF_SUITES") ) {
+    if ( defined $mac ) {
         my $stats = pf::stats->new();
         my $md5 = Digest::MD5->new;
         my $suites = $r->subprocess_env("SSLHAF_SUITES") || '';
         my $user_agent = $r->headers_in->{'User-Agent'} || '';
         my $ua_prof = uaprof($r);
-        $md5->add($user_agent, $suites);
+        $md5->add($mac,$user_agent,$ua_prof,$suites);
         $stats->stats_http($mac,$md5->hexdigest,$user_agent,$ua_prof,$suites);
     }
 

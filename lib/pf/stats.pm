@@ -46,7 +46,7 @@ sub stats_dns {
     my($this,$mac,$domain) = @_;
     my $sqlite = $this->{'sqlite'};
 
-    my  $sth = $sqlite->prepare( "INSERT OR REPLACE INTO dns(mac,Domain) VALUES (?,?)");
+    my  $sth = $sqlite->prepare( "INSERT OR REPLACE INTO dns(mac,domain) VALUES (?,?)");
     $sth->execute($mac,$domain);
 }
 
@@ -54,16 +54,16 @@ sub stats_dhcp {
     my($this,$mac,$finger,$vendor_id,$computer_name,$hash) = @_;
     my $sqlite = $this->{'sqlite'};
 
-    my $sth = $sqlite->prepare( "INSERT OR REPLACE INTO dhcp(HASH,mac,Finger,Vendor_ID,Computer_name) VALUES (?,?,?,?,?)");
+    my $sth = $sqlite->prepare( "INSERT OR REPLACE INTO dhcp(hash,mac,finger,vendor_id,computer_name) VALUES (?,?,?,?,?)");
     $sth->execute($hash,$mac,$finger,$vendor_id,$computer_name);
 }
 
 sub stats_http {
-    my($this,$hash,$mac,$url,$user_agent,$headers) = @_;
+    my($this,$mac,$hash,$user_agent,$uaprof,$suites) = @_;
     my $sqlite = $this->{'sqlite'};
 
-    my $sth = $sqlite->prepare( "INSERT OR REPLACE INTO http(hash,mac,URL,UA,UAPROF) VALUES (?,?,?,?,?)");
-    $sth->execute($hash,$mac,$url,$user_agent,$headers);
+    my $sth = $sqlite->prepare( "INSERT OR REPLACE INTO http(hash,mac,ua,uaprof,suites) VALUES (?,?,?,?,?)");
+    $sth->execute($hash,$mac,$user_agent,$uaprof,$suites);
 }
 
 
@@ -80,13 +80,13 @@ sub create_tables {
 
 
     $sqlite->do("DROP TABLE IF EXISTS mac");
-    $sqlite->do("CREATE TABLE mac(mac TEXT PRIMARY KEY, Vendor TEXT)");
+    $sqlite->do("CREATE TABLE mac (mac TEXT PRIMARY KEY, vendor TEXT)");
     $sqlite->do("DROP TABLE IF EXISTS dhcp");
-    $sqlite->do("CREATE TABLE dhcp(HASH TEXT PRIMARY KEY,mac TEXT, Finger TEXT, Vendor_ID TEXT, Computer_name TEXT)");
+    $sqlite->do("CREATE TABLE dhcp (hash TEXT PRIMARY KEY, mac TEXT, finger TEXT, vendor_id TEXT, computer_name TEXT)");
     $sqlite->do("DROP TABLE IF EXISTS dns");
-    $sqlite->do("CREATE TABLE dns(mac TEXT , Domain TEXT)");
+    $sqlite->do("CREATE TABLE dns (mac TEXT, domain TEXT)");
     $sqlite->do("DROP TABLE IF EXISTS http");
-    $sqlite->do("CREATE TABLE http(mac TEXT PRIMARY KEY, URL TEXT, UA TEXT, UAPROF TEXT)");
+    $sqlite->do("CREATE TABLE http (hash TEXT PRIMARY KEY, mac TEXT, ua TEXT, uaprof TEXT, suites TEXT)");
     $sqlite->do("VACUUM");
 }
 

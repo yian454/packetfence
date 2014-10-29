@@ -12,7 +12,7 @@ pfdhcpd
 
 use warnings;
 use strict;
-use English qw( ‐no_match_vars ) ; # Avoids regex performance penalty
+use English qw( -no_match_vars ) ; # Avoids regex performance penalty
 use File::Basename qw(basename);
 use Getopt::Std;
 use Log::Log4perl;
@@ -110,11 +110,12 @@ POSIX::sigaction(
 our $RUNNING = 1;
 
 my %args;
-getopts( 'dslh:', \%args );
+getopts( 'dsluh:', \%args );
 
 my $daemonize = $args{d};
 my $stat = $args{s};
 my $listener = $args{l};
+my $update = $args{u};
 
 pod2usage( -verbose => 1 ) if ( $args{h} );
 
@@ -191,10 +192,18 @@ sub reload_config {
         $listen_handler{$sock_in} = \&dhcpd_handler;
         if (!defined($keep_int) || ($keep_int eq '')) {
             $keep_int = shift @ints;
-            $ethernet_inf{$sock_in} = $keep_int;
+            $ethernet_inf{$sock_in}{'int'} = IO::Interface::Simple->new($keep_int);
+            #Fetch the dhcp_config based on the network interface
+            my $net_addr = NetAddr::IP->new($ethernet_inf{$sock_in}{'int'}->address,$ethernet_inf{$sock_in}{'int'}->netmask);
+            my $net = $net_addr->network;
+            $ethernet_inf{$sock_in}{'net'} = $net_addr;
         }
         else {
-            $ethernet_inf{$sock_in} = $keep_int;
+            $ethernet_inf{$sock_in}{'int'} = IO::Interface::Simple->new($keep_int);
+            #Fetch the dhcp_config based on the network interface
+            my $net_addr = NetAddr::IP->new($ethernet_inf{$sock_in}{'int'}->address,$ethernet_inf{$sock_in}{'int'}->netmask);
+            my $net = $net_addr->network;
+            $ethernet_inf{$sock_in}{'net'} = $net_addr;
             $keep_int ='';
         }
     }
@@ -212,7 +221,7 @@ reload_config;
 
 # entering loop
 while ($RUNNING) {
-    my @select_set = $read_set->can_read;
+    my @select_set = $read_set->can_read();
     foreach my $server (@select_set) {
         my $handler = $listen_handler{$server};
         $handler->($server);
@@ -227,14 +236,14 @@ sub dhcpd_handler {
     my $buf = undef;
     my $fromaddr;                        # address & port from which packet was received
     my $dhcpreq;
-    my $net_addr;
     my %dhcp_config;
+    my $net_addr;
 
     #if is the interface where the dhcp traffic is coming
- 
-    my $if   = IO::Interface::Simple->new($ethernet_inf{$sock_in});
 
-    $logger->debug("Incoming DHCP request on interface $ethernet_inf{$sock_in}");
+    my $if   = $ethernet_inf{$sock_in}{'int'};
+
+    $logger->debug("Incoming DHCP request on interface $if");
     $logger->debug("Incoming DHCP request on ip ".$if->address);
 
 
@@ -261,25 +270,33 @@ sub dhcpd_handler {
                 $peeraddr = '255.255.255.255';
 
                 #Fetch the dhcp_config based on the network interface
-                $net_addr = NetAddr::IP->new($if->address,$if->netmask);
-                my $net = $net_addr->network;
-                my $netAddress = $net->addr;
-                %dhcp_config = %{$ConfigNetworks{$netAddress}} if(exists $ConfigNetworks{$netAddress} && defined $ConfigNetworks{$netAddress});
+                my $net = $ethernet_inf{$sock_in}{'net'}->network;
+                $net_addr = $ethernet_inf{$sock_in}{'net'};
+                %dhcp_config = %{$ConfigNetworks{$net->addr}} if (exists $ConfigNetworks{$net->addr} && defined($ConfigNetworks{$net->addr}));
             }
             #Suppose Layer 3 search for the remote network
             else {
                 #Fetch the dhcp_config based on the source ip address 
                 $peeraddr = $ipaddr;
-                foreach my $network ( keys %ConfigNetworks ) {
-                    # shorter, more convenient local accessor
-                    $net_addr = NetAddr::IP->new($network,$ConfigNetworks{$network}{'netmask'});
-                    my $ip = new NetAddr::IP::Lite clean_ip($ipaddr);
-                    if ($net_addr->contains($ip)) {
-                        my $net = $net_addr->network;
-                        my $netAddress = $net->addr;
-                        %dhcp_config = %{$ConfigNetworks{$netAddress}} if(exists $ConfigNetworks{$netAddress} && defined $ConfigNetworks{$netAddress});
-                        $layer3 = 1;
-                        last;
+                if (defined($ethernet_inf{$sock_in}{'network'}{$ipaddr}) && $ethernet_inf{$sock_in}{'network'}{$ipaddr} ne '') {
+                    my $net = $ethernet_inf{$sock_in}{'network'}{$ipaddr}->network;
+                    $net_addr = $ethernet_inf{$sock_in}{'network'}{$ipaddr};
+                    %dhcp_config = %{$ConfigNetworks{$net->addr}} if(exists $ConfigNetworks{$net->addr} && defined $ConfigNetworks{$net->addr});
+                    $layer3 = 1;
+                } else {
+                    foreach my $network ( keys %ConfigNetworks ) {
+                        # shorter, more convenient local accessor
+                        my $net_addr2 = NetAddr::IP->new($network,$ConfigNetworks{$network}{'netmask'});
+                        my $ip = new NetAddr::IP::Lite clean_ip($ipaddr);
+                        if ($net_addr2->contains($ip)) {
+                            my $net = $net_addr2->network;
+                            my $netAddress = $net->addr;
+                            %dhcp_config = %{$ConfigNetworks{$netAddress}} if(exists $ConfigNetworks{$netAddress} && defined $ConfigNetworks{$netAddress});
+                            $layer3 = 1;
+                            $ethernet_inf{$sock_in}{'network'}{$ipaddr} = $net_addr2;
+                            $net_addr = $net_addr2;
+                            last;
+                        }
                     }
                 }
             }
@@ -297,7 +314,7 @@ sub dhcpd_handler {
         }
     
         # There is activity from that mac, call node wakeup
-        node_mac_wakeup($mac);
+        node_mac_wakeup($mac) if defined($update);
     
         # Option 82 Relay Agent Information (RFC3046)
         if ( isenabled( $Config{'network'}{'dhcpoption82logger'} ) && defined( $dhcpreq->getOptionValue(DHO_DHCP_AGENT_OPTIONS()) ) ) {
@@ -315,16 +332,15 @@ sub dhcpd_handler {
         $tmp{'last_dhcp'} = mysql_date();
         $tmp{'computername'} = defined($dhcpreq->getOptionValue(DHO_HOST_NAME() )) ? $dhcpreq->getOptionValue(DHO_HOST_NAME() ) : '';
         my $vendor_id = defined($dhcpreq->getOptionValue(DHO_VENDOR_CLASS_IDENTIFIER() )) ? $dhcpreq->getOptionValue(DHO_VENDOR_CLASS_IDENTIFIER() ) : '';
-        node_modify( $mac, %tmp ) ;
+        node_modify( $mac, %tmp ) if defined($update);
         my $fingerprint_data = process_fingerprint($dhcpreq);
 
         if (defined($stat)) {
             my $stats = pf::stats->new();
             my $md5 = Digest::MD5->new;
-            $md5->add($tmp{'dhcp_fingerprint'},$vendor_id);
-            $stats->stats_dhcp($mac,$tmp{'dhcp_fingerprint'},$vendor_id,$tmp{'computername'},$md5->hexdigest,$fingerprint_data);
+            $md5->add($mac,$tmp{'dhcp_fingerprint'},$vendor_id);
+            $stats->stats_dhcp($mac,$tmp{'dhcp_fingerprint'},$vendor_id,$tmp{'computername'},$md5->hexdigest);
         }
-
         my $modified_node_log_message = '';
         foreach my $node_key ( keys %tmp ) {
             $modified_node_log_message .= "$node_key = " . $tmp{$node_key} . ",";
@@ -339,19 +355,22 @@ sub dhcpd_handler {
         #Fetch the request type in the dhcp packet
         my $messagetype = $dhcpreq->getOptionValue(DHO_DHCP_MESSAGE_TYPE());
 
-        if ($messagetype eq DHCPDISCOVER()) {
-            do_discover($dhcpreq,$peeraddr,\$if,\%dhcp_config,\$net_addr,$layer3);
-        } elsif ($messagetype eq DHCPREQUEST()) {
-            do_request($dhcpreq,$peeraddr,\$if,\%dhcp_config,\$net_addr,$layer3);
-        } elsif ($messagetype eq DHCPINFORM()) {
-            do_inform($dhcpreq,$peeraddr,\$if,\%dhcp_config,\$net_addr,$layer3);
-        } elsif ($messagetype eq DHCPRELEASE()) {
-            parse_dhcp_release($dhcpreq,\$if);
-        } elsif ($messagetype eq DHCPOFFER()) {
-            parse_dhcp_offer($dhcpreq,\$if);
-        } else {
-            $logger->warn("Packet dropped");
-            # bad messagetype, we drop it
+
+
+        if (defined($messagetype)) {
+            $logger->warn("PFDHCPD ".$messagetype." ".$if->address);
+            if ($messagetype eq DHCPDISCOVER()) {
+                do_discover($dhcpreq,$peeraddr,\$if,\%dhcp_config,\$net_addr,$layer3);
+            } elsif ($messagetype eq DHCPREQUEST()) {
+                do_request($dhcpreq,$peeraddr,\$if,\%dhcp_config,\$net_addr,$layer3);
+            } elsif ($messagetype eq DHCPINFORM()) {
+                do_inform($dhcpreq,$peeraddr,\$if,\%dhcp_config,\$net_addr,$layer3);
+            } elsif ($messagetype eq DHCPRELEASE()) {
+                parse_dhcp_release($dhcpreq,\$if);
+            } else {
+                $logger->warn("Packet dropped");
+                # bad messagetype, we drop it
+            }
         }
     };
     # end of 'eval' blocks
@@ -406,7 +425,7 @@ sub do_discover {
 
         $logger->debug($dhcpresp->toString());
         # Parse the dhcp offer
-        # parse_dhcp_offer($dhcpresp,$ip_src);
+        parse_dhcp_offer($dhcpresp,$ip_src);
 
         my $peer = "$peeraddr:68";
         $peer = "$peeraddr:67" if ($layer3);
@@ -495,10 +514,10 @@ sub do_request {
         $logger->debug($peeraddr);
         my $sock_in;
         if ($layer3) {
-           $sock_in = IO::Socket::INET->new(Type => SOCK_DGRAM, Reuse => 1, LocalPort => 67, LocalAddr => $$ip_src->address, Proto => 'udp', ,PeerAddr => "$peeraddr:67");
-           # Send the packet to the network
-           $sock_in->send($dhcpresp->serialize());
-           shutdown($sock_in, 2);
+            $sock_in = IO::Socket::INET->new(Type => SOCK_DGRAM, Reuse => 1, LocalPort => 67, LocalAddr => $$ip_src->address, Proto => 'udp', ,PeerAddr => "$peeraddr:67");
+            # Send the packet to the network
+            $sock_in->send($dhcpresp->serialize());
+            shutdown($sock_in, 2);
         } else {
             $sock_in = IO::Socket::INET->new(Type => SOCK_DGRAM, Reuse => 1, LocalPort => 67, LocalAddr => $$ip_src->address, Proto => 'udp', Broadcast => 1,PeerAddr => "$peeraddr:68");
             # Send the packet to the network
@@ -599,11 +618,10 @@ sub process_fingerprint {
     my ($dhcp) = @_;
 
     my $dhcp_fingerprint = $dhcp->getOptionValue(DHO_DHCP_PARAMETER_REQUEST_LIST());
+    return if (!defined($dhcp_fingerprint) || $dhcp_fingerprint eq "");
     $dhcp_fingerprint =~ s/\s/,/g;
     my $chaddr = clean_mac( substr( $dhcp->chaddr(), 0, 12 ) );
     my $fingerprint_data;
-
-    return if (!defined($dhcp_fingerprint) || $dhcp_fingerprint eq "");
 
     my @fingerprint_info = dhcp_fingerprint_view($dhcp_fingerprint);
     if ( scalar(@fingerprint_info) && ( ref( $fingerprint_info[0] ) eq 'HASH' ) ) {
@@ -771,13 +789,14 @@ sub parse_dhcp_request {
     $logger->debug("DHCPREQUEST from ". clean_mac( substr( $dhcp->chaddr(), 0, 12 ) ));
 
     my $lease_length = $dhcp->getOptionValue(DHO_DHCP_LEASE_TIME());
-    my $client_ip = $dhcp->getOptionValue(DHO_DHCP_REQUESTED_ADDRESS()) ||  $dhcp->ciaddr;
+
+    my $client_ip = $dhcp->getOptionValue(DHO_DHCP_REQUESTED_ADDRESS()) || $dhcp->ciaddr;
     if (defined($client_ip) && $client_ip !~ /^0\.0\.0\.0$/) {
         $logger->info(
             "DHCPREQUEST from ". clean_mac( substr( $dhcp->chaddr(), 0, 12 ) )." (".$client_ip.")"
             . ( defined($lease_length) ? " with lease of $lease_length seconds" : "")
         );
-        update_iplog( clean_mac( substr( $dhcp->chaddr(), 0, 12 ) ), $client_ip, $lease_length );
+        update_iplog( clean_mac( substr( $dhcp->chaddr(), 0, 12 ) ), $client_ip, $lease_length ) if defined($update);
     }
 
     # As per RFC2131 in a DHCPREQUEST if ciaddr is set and we broadcast, we are in re-binding state
@@ -807,18 +826,18 @@ sub parse_dhcp_ack {
     if ($dhcp->yiaddr() !~ /^0\.0\.0\.0$/) {
 
         $logger->info(
-            "DHCPACK from $s_ip ($s_mac) to host ". clean_mac( substr( $dhcp->chaddr(), 0, 12 ) )." (". $dhcp->yiaddr().")"
+            "PFDHCPD DHCPACK from $s_ip ($s_mac) to host ". clean_mac( substr( $dhcp->chaddr(), 0, 12 ) )." (". $dhcp->yiaddr().")"
             . ( defined($lease_length) ? " for $lease_length seconds" : "" )
         );
-        update_iplog( clean_mac( substr( $dhcp->chaddr(), 0, 12 ) ), $dhcp->yiaddr(), $lease_length );
+        update_iplog( clean_mac( substr( $dhcp->chaddr(), 0, 12 ) ), $dhcp->yiaddr(), $lease_length ) if defined($update);
 
     } elsif ($dhcp->ciaddr() !~ /^0\.0\.0\.0$/) {
 
         $logger->info(
-            "DHCPACK CIADDR from $s_ip ($s_mac) to host ".clean_mac( substr( $dhcp->chaddr(), 0, 12 ) )." (".$dhcp->ciaddr().")"
+            "PFDHCPD DHCPACK CIADDR from $s_ip ($s_mac) to host ".clean_mac( substr( $dhcp->chaddr(), 0, 12 ) )." (".$dhcp->ciaddr().")"
             . ( defined($lease_length) ? " for $lease_length seconds" : "")
         );
-        update_iplog( clean_mac( substr( $dhcp->chaddr(), 0, 12 ) ), $dhcp->ciaddr(), $lease_length );
+        update_iplog( clean_mac( substr( $dhcp->chaddr(), 0, 12 ) ), $dhcp->ciaddr(), $lease_length ) if defined($update);
 
     } else {
         $logger->warn(
@@ -848,7 +867,7 @@ sub do_inform {
     # $net_addr is a NetAddr::IP object of the dhcp zone
 
     # If we find a dhcp configuration then we have to answer
-    if ($dhcp_config->{'netmask'}) {
+    if ($dhcp_config->{'netmask'} && !defined($listener)) {
         my $dhcpresp;
         my $net = $$net_addr->network;
 
@@ -891,7 +910,7 @@ sub do_inform {
             shutdown($sock_in, 2);
         }
     }
-    #update_iplog( clean_mac( substr( $dhcpreq->chaddr(), 0, 12 ) ), $dhcpreq->ciaddr(), $dhcp_config->{'dhcp_max_lease_time'} + 5);
+    update_iplog( clean_mac( substr( $dhcpreq->chaddr(), 0, 12 ) ), $dhcpreq->ciaddr(), $dhcp_config->{'dhcp_max_lease_time'}) if defined($update);
     $logger->warn("DHCPINFORM from ".clean_mac( substr( $dhcpreq->chaddr(), 0, 12 ) )." (".$dhcpreq->ciaddr().")");
 }
 
@@ -934,4 +953,3 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301,
 USA.
 
 =cut
-

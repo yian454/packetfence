@@ -17,7 +17,7 @@ use Apache2::RequestUtil ();
 use Apache2::ServerRec;
 use Apache2::URI ();
 use Apache2::Util ();
-use Apache::Connection;
+use Apache2::Connection;
 
 use APR::Table;
 use APR::URI;

@@ -17,7 +17,7 @@ use Apache2::RequestUtil ();
 use Apache2::ServerRec;
 use Apache2::URI ();
 use Apache2::Util ();
-use Apache2::Connection;
+use Apache2::Connection ();
 
 use APR::Table;
 use APR::URI;
@@ -26,7 +26,6 @@ use URI::Escape::XS qw(uri_escape);
 BEGIN {
     use pf::log service => 'httpd.portal';
 }
-use Digest::MD5;
 
 use pf::config;
 use pf::util;
@@ -37,7 +36,6 @@ use pf::proxypassthrough::constants;
 use pf::Portal::Session;
 use pf::web::provisioning::custom;
 use pf::web::externalportal;
-use pf::stats;
 use pf::iplog qw(ip2mac);
 
 =head1 SUBROUTINES
@@ -85,15 +83,14 @@ sub handler {
 
     # Fetch stats
     my $c = $r->connection();
-    my $mac = ip2mac($c->remote_ip());
+    my $ip =  $r->headers_in->{'X-Forwarded-For'} || $c->remote_ip();
+    my $mac = ip2mac($ip);
     if ( defined $mac ) {
-        my $stats = pf::stats->new();
-        my $md5 = Digest::MD5->new;
         my $suites = $r->subprocess_env("SSLHAF_SUITES") || '';
         my $user_agent = $r->headers_in->{'User-Agent'} || '';
         my $ua_prof = uaprof($r);
-        $md5->add($mac,$user_agent,$ua_prof,$suites);
-        $stats->stats_http($mac,$md5->hexdigest,$user_agent,$ua_prof,$suites);
+        $r->subprocess_env->set(STATS => 1);
+        $r->subprocess_env(STATS => "$mac;$user_agent;$ua_prof;$suites");
     }
 
     # Test if the hostname is include in the proxy_passthroughs configuration

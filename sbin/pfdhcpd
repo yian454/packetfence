@@ -25,7 +25,6 @@ use IO::Socket::INET;
 use Net::DHCP::Packet;
 use Net::DHCP::Constants;
 use NetAddr::IP;
-use Net::Ping;
 use List::MoreUtils qw(uniq);
 use Readonly;
 use Digest::MD5;
@@ -37,21 +36,21 @@ BEGIN {
     use pf::log(service => 'pfdhcplistener');
 }
 
-use pf::services::util;
+use pf::api::jsonrpcclient;
 use pf::config;
-use pf::util;
-use pf::iplog;
 use pf::config::cached;
 use pf::db;
+use pf::iplog;
+use pf::ipset;
 use pf::inline::custom $INLINE_API_LEVEL;
 use pf::locationlog;
 use pf::lookup::node;
 use pf::node;
 use pf::os;
-use pf::violation qw(violation_trigger);
-use pf::ipset;
-# Hum very strange lib !!!
+use pf::services::util;
 use pf::stats;
+use pf::util;
+use pf::violation qw(violation_trigger);
 
 Readonly my %MESSAGE_TYPE => (
     'DHCPDISCOVER' => 1,
@@ -73,10 +72,15 @@ my %lease;
 my $ROGUE_DHCP_TRIGGER = '1100010';
 my %rogue_servers;
 my $is_inline_vlan;
-my $accessControl;
+my $accessControl = new pf::inline::custom();
 my $interface_ip;
 my $interface_vlan;
 my @local_dhcp_servers;
+my @ip_addr;
+my $int;
+my $read_set;
+my $keep_int;
+my $apiclient = pf::api::jsonrpcclient->new;
 
 # initialization
 # --------------
@@ -126,11 +130,6 @@ END {
     deletepid($PROGRAM_NAME) unless $args{h};
 }
 
-
-my @ip_addr;
-my $int;
-my $read_set;
-my $keep_int;
 
 =head2 reload_config
 
@@ -195,27 +194,24 @@ sub reload_config {
             $ethernet_inf{$sock_in}{'int'} = IO::Interface::Simple->new($keep_int);
             #Fetch the dhcp_config based on the network interface
             my $net_addr = NetAddr::IP->new($ethernet_inf{$sock_in}{'int'}->address,$ethernet_inf{$sock_in}{'int'}->netmask);
-            my $net = $net_addr->network;
             $ethernet_inf{$sock_in}{'net'} = $net_addr;
         }
         else {
             $ethernet_inf{$sock_in}{'int'} = IO::Interface::Simple->new($keep_int);
             #Fetch the dhcp_config based on the network interface
             my $net_addr = NetAddr::IP->new($ethernet_inf{$sock_in}{'int'}->address,$ethernet_inf{$sock_in}{'int'}->netmask);
-            my $net = $net_addr->network;
             $ethernet_inf{$sock_in}{'net'} = $net_addr;
             $keep_int ='';
         }
     }
+    # Keep the last ip sent by the server
+
+    foreach my $network ( keys %ConfigNetworks ) {
+        $lease{$network} = $ConfigNetworks{$network}{'dhcp_start'};
+    }
     $RUNNING = 1;
 }
 
-
-# Keep the last ip send by the server
-
-foreach my $network ( keys %ConfigNetworks ) {
-    $lease{$network} = $ConfigNetworks{$network}{'dhcp_start'};
-}
 
 reload_config;
 
@@ -267,6 +263,7 @@ sub dhcpd_handler {
             #The answer is different if it is a layer 3 network
             #Suppose Layer 2 search for the direct network
             my $ip = new NetAddr::IP::Lite clean_ip($ipaddr);
+            #Test is the source ip is a broadcast address or if it match a local network
             if ( ($ipaddr eq '0.0.0.0') || ( $ethernet_inf{$sock_in}{'net'}->contains($ip) ) ) {
                 $peeraddr = '255.255.255.255';
 
@@ -279,14 +276,15 @@ sub dhcpd_handler {
             else {
                 #Fetch the dhcp_config based on the source ip address 
                 $peeraddr = $ipaddr;
+                #If it´s defined use it
                 if (defined($ethernet_inf{$sock_in}{'network'}{$ipaddr}) && $ethernet_inf{$sock_in}{'network'}{$ipaddr} ne '') {
                     my $net = $ethernet_inf{$sock_in}{'network'}{$ipaddr}->network;
                     $net_addr = $ethernet_inf{$sock_in}{'network'}{$ipaddr};
                     %dhcp_config = %{$ConfigNetworks{$net->addr}} if(exists $ConfigNetworks{$net->addr} && defined $ConfigNetworks{$net->addr});
                     $layer3 = 1;
                 } else {
+                    # Search for the dhcp config.
                     foreach my $network ( keys %ConfigNetworks ) {
-                        # shorter, more convenient local accessor
                         my $net_addr2 = NetAddr::IP->new($network,$ConfigNetworks{$network}{'netmask'});
                         if ($net_addr2->contains($ip)) {
                             my $net = $net_addr2->network;
@@ -304,8 +302,6 @@ sub dhcpd_handler {
   
         my $dhcpreq = new Net::DHCP::Packet($buf);
 
-        $logger->debug($dhcpreq->toString());
-
         # Add mac if not exist
         my $mac = clean_mac( substr( $dhcpreq->chaddr(), 0, 12 ) );
         if ( !node_exist($mac) ) {
@@ -321,37 +317,6 @@ sub dhcpd_handler {
             parse_dhcp_option82($dhcpreq);
         }
     
-        # Proceed with the fingerpint
-
-        # updating the node first
-        # in case the fingerprint generates a violation and that autoreg uses fingerprint to auto-categorize nodes
-        # see #1216 for details
-        my %tmp;
-        $tmp{'dhcp_fingerprint'} = defined($dhcpreq->getOptionValue(DHO_DHCP_PARAMETER_REQUEST_LIST() ) ) ? $dhcpreq->getOptionValue(DHO_DHCP_PARAMETER_REQUEST_LIST() ) : '';
-        $tmp{'dhcp_fingerprint'} =~ s/\s/,/g;
-        $tmp{'last_dhcp'} = mysql_date();
-        $tmp{'computername'} = defined($dhcpreq->getOptionValue(DHO_HOST_NAME() )) ? $dhcpreq->getOptionValue(DHO_HOST_NAME() ) : '';
-        my $vendor_id = defined($dhcpreq->getOptionValue(DHO_VENDOR_CLASS_IDENTIFIER() )) ? $dhcpreq->getOptionValue(DHO_VENDOR_CLASS_IDENTIFIER() ) : '';
-        node_modify( $mac, %tmp ) if defined($update);
-        my $fingerprint_data = process_fingerprint($dhcpreq);
-
-        if (defined($stat)) {
-            my $stats = pf::stats->new();
-            my $md5 = Digest::MD5->new;
-            $md5->add($mac,$tmp{'dhcp_fingerprint'},$vendor_id);
-            $stats->stats_dhcp($mac,$tmp{'dhcp_fingerprint'},$vendor_id,$tmp{'computername'},$md5->hexdigest);
-        }
-        my $modified_node_log_message = '';
-        foreach my $node_key ( keys %tmp ) {
-            $modified_node_log_message .= "$node_key = " . $tmp{$node_key} . ",";
-        }
-        chop($modified_node_log_message);
-
-        $logger->info("$mac requested an IP. "
-            . ( defined($fingerprint_data) ? "DHCP Fingerprint: $fingerprint_data. " : "Unknown DHCP fingerprint. " )
-            . "Modified node with $modified_node_log_message"
-        );
-
         #Fetch the request type in the dhcp packet
         my $messagetype = $dhcpreq->getOptionValue(DHO_DHCP_MESSAGE_TYPE());
 
@@ -362,6 +327,7 @@ sub dhcpd_handler {
                 do_discover($dhcpreq,$peeraddr,\$if,\%dhcp_config,\$net_addr,$layer3);
             } elsif ($messagetype eq DHCPREQUEST()) {
                 do_request($dhcpreq,$peeraddr,\$if,\%dhcp_config,\$net_addr,$layer3,$sock_in->sockopt(SO_BROADCAST));
+                parse_fingerprint($mac,$dhcpreq);
             } elsif ($messagetype eq DHCPINFORM()) {
                 do_inform($dhcpreq,$peeraddr,\$if,\%dhcp_config,\$net_addr,$layer3);
             } elsif ($messagetype eq DHCPRELEASE()) {
@@ -378,6 +344,42 @@ sub dhcpd_handler {
         $logger->warn("Caught error in main loop:$@");
     }
        
+}
+
+
+sub parse_fingerprint {
+    my ($mac,$dhcpreq)= @_;
+
+    # Proceed with the fingerpint
+
+    # updating the node first
+    # in case the fingerprint generates a violation and that autoreg uses fingerprint to auto-categorize nodes
+    # see #1216 for details
+    my %tmp;
+    $tmp{'dhcp_fingerprint'} = defined($dhcpreq->getOptionValue(DHO_DHCP_PARAMETER_REQUEST_LIST() ) ) ? $dhcpreq->getOptionValue(DHO_DHCP_PARAMETER_REQUEST_LIST() ) : '';
+    $tmp{'dhcp_fingerprint'} =~ s/\s/,/g;
+    $tmp{'last_dhcp'} = mysql_date();
+    $tmp{'computername'} = defined($dhcpreq->getOptionValue(DHO_HOST_NAME() )) ? $dhcpreq->getOptionValue(DHO_HOST_NAME() ) : '';
+    my $vendor_id = defined($dhcpreq->getOptionValue(DHO_VENDOR_CLASS_IDENTIFIER() )) ? $dhcpreq->getOptionValue(DHO_VENDOR_CLASS_IDENTIFIER() ) : '';
+    node_modify( $mac, %tmp ) if defined($update);
+    my $fingerprint_data = process_fingerprint($dhcpreq);
+
+    if (defined($stat)) {
+        my $stats = pf::stats->new();
+        my $md5 = Digest::MD5->new;
+        $md5->add($mac,$tmp{'dhcp_fingerprint'},$vendor_id);
+        $stats->stats_dhcp($mac,$tmp{'dhcp_fingerprint'},$vendor_id,$tmp{'computername'},$md5->hexdigest);
+    }
+    my $modified_node_log_message = '';
+    foreach my $node_key ( keys %tmp ) {
+        $modified_node_log_message .= "$node_key = " . $tmp{$node_key} . ",";
+    }
+    chop($modified_node_log_message);
+
+    $logger->info("$mac requested an IP. "
+        . ( defined($fingerprint_data) ? "DHCP Fingerprint: $fingerprint_data. " : "Unknown DHCP fingerprint. " )
+        . "Modified node with $modified_node_log_message"
+    );
 }
 
 sub do_discover {
@@ -450,6 +452,14 @@ sub do_request {
 
     # If we find a dhcp configuration then we have to answer
     if (($dhcp_config->{'netmask'}) && !defined($listener)) {
+
+        # Update location_log is it´s an inline network
+        if (pf::config::is_network_type_inline($dhcp_config)) {
+            my $vlan = get_vlan_from_int($$ip_src) || '';
+            $apiclient->notify('synchronize_locationlog', $ip_src->address , $ip_src->address, undef, $NO_PORT, $vlan, clean_mac( substr( $dhcpreq->chaddr(), 0, 12 ) ), $NO_VOIP, $INLINE);
+            $accessControl->performInlineEnforcement(clean_mac( substr( $dhcpreq->chaddr(), 0, 12 ) ));
+        }
+
         my $dhcpresp;
         my $net = $$net_addr->network;
 
@@ -535,7 +545,7 @@ sub do_request {
        }
     } else {
         # No dhcp zone then we parse the dhcp request (Listener)
-        parse_dhcp_request($dhcpreq,$ip_src);
+        parse_dhcp_request($dhcpreq,$ip_src,$dhcp_config);
     }
 }
 
@@ -633,13 +643,13 @@ sub process_fingerprint {
         # precise fingerprint
         $fingerprint_data = "OS::".$fingerprint_info[0]->{'id'}." (".$fingerprint_info[0]->{'os'}.")";
         $logger->debug("$chaddr sending $fingerprint_data trigger");
-        violation_trigger( $chaddr, $fingerprint_info[0]->{'id'}, "OS" );
+        $apiclient->notify('trigger_violation', $chaddr, $fingerprint_info[0]->{'id'}, "OS" );
 
         # class fingerprints
         foreach my $class_trigger (@fingerprint_info) {
             my $class_data = "OS::".$class_trigger->{'classid'}." (".$class_trigger->{'class'}.")";
             $logger->debug("$chaddr sending $class_data trigger");
-            violation_trigger( $chaddr, $class_trigger->{'classid'}, "OS" );
+            $apiclient->notify('trigger_violation', $chaddr, $class_trigger->{'classid'}, "OS" );
         }
 
     } else {
@@ -664,7 +674,7 @@ sub parse_dhcp_option82 {
 
         # TODO port should be translated into ifIndex
         # FIXME option82 stuff needs to be re-validated (#1340)
-        locationlog_insert_closed($switch, $mod . '/' . $port, $vlan, clean_mac( substr( $dhcp->chaddr(), 0, 12 ) ), '');
+        $apiclient->notify('insert_close_locationlog', $switch, $mod . '/' . $port, $vlan, clean_mac( substr( $dhcp->chaddr(), 0, 12 ) ), '');
     }
 }
 
@@ -678,25 +688,16 @@ sub update_iplog {
         return;
     }
 
-    my $oldmac = ip2mac($srcip);
     my $oldip  = mac2ip($srcmac);
 
     if ( $oldip && $oldip ne $srcip ) {
+        my $oldmac = ip2mac($srcip);
         my $view_mac = node_view($srcmac);
         if ($view_mac->{'last_connection_type'} eq $connection_type_to_str{$INLINE}) {
-            my $technique = $accessControl->{_technique};
-            if ($IPSET_VERSION != 0) {
-                pf::ipset::update_node($oldip, $srcip, $srcmac);
-            }
-            #Problem with instanciate the technique Issue ID:1585
-            #$technique->update_node($oldip, $srcip, $srcmac);
+            $apiclient->notify('ipset_node_update',$oldip, $srcip, $srcmac);
         }
-        $logger->info(
-            "oldip ($oldip) and newip ($srcip) are different for $srcmac - closing iplog entry"
-        );
-        iplog_close_now($oldip);
     }
-    iplog_open( $srcmac, $srcip, $lease_length );
+    $apiclient->notify('update_iplog', $srcmac, $srcip, $lease_length );
 }
 
 =item rogue_dhcp_handling
@@ -736,7 +737,7 @@ sub rogue_dhcp_handling {
     # if I have a MAC use it, otherwise look it up
     $dhcp_srv_mac = ip2mac($dhcp_srv_ip) if (!defined($dhcp_srv_mac));
     if ($dhcp_srv_mac) {
-        violation_trigger( $dhcp_srv_mac, $ROGUE_DHCP_TRIGGER, 'INTERNAL' );
+        $apiclient->notify('trigger_violation', $dhcp_srv_mac, $ROGUE_DHCP_TRIGGER, 'INTERNAL' );
     } else {
         $logger->info("Unable to find MAC based on IP $dhcp_srv_ip for rogue DHCP server");
         $dhcp_srv_mac = 'unknown';
@@ -789,7 +790,7 @@ sub parse_dhcp_offer {
 
 =cut
 sub parse_dhcp_request {
-    my ($dhcp,$if) = @_;
+    my ($dhcp,$if,$dhcp_config) = @_;
     $logger->debug("DHCPREQUEST from ". clean_mac( substr( $dhcp->chaddr(), 0, 12 ) ));
 
     my $lease_length = $dhcp->getOptionValue(DHO_DHCP_LEASE_TIME());
@@ -809,8 +810,9 @@ sub parse_dhcp_request {
         rogue_dhcp_handling($dhcp->getOptionValue(DHO_DHCP_SERVER_IDENTIFIER()), undef, $client_ip, clean_mac( substr( $dhcp->chaddr(), 0, 12 ) ), $dhcp->giaddr(),$if);
     }
 
-    if ($is_inline_vlan) {
-        locationlog_synchronize($interface_ip, $NO_PORT, $interface_vlan, clean_mac( substr( $dhcp->chaddr(), 0, 12 ) ), $NO_VOIP, $INLINE);
+    if (pf::config::is_network_type_inline($dhcp_config)) {
+        my $vlan = get_vlan_from_int($$if) || '';
+        $apiclient->notify('synchronize_locationlog', $if->address , $if->address, undef, $NO_PORT, $vlan, clean_mac( substr( $dhcp->chaddr(), 0, 12 ) ), $NO_VOIP, $INLINE);
         $accessControl->performInlineEnforcement(clean_mac( substr( $dhcp->chaddr(), 0, 12 ) ));
     }
 }
@@ -856,7 +858,7 @@ sub parse_dhcp_ack {
 sub parse_dhcp_release {
     my ($dhcp,$if) = @_;
     $logger->debug("DHCPRELEASE from ". clean_mac( substr( $dhcp->chaddr(), 0, 12 ) )." (".$dhcp->ciaddr().")");
-    iplog_close($dhcp->ciaddr());
+    $apiclient->notify('close_iplog',$dhcp->ciaddr());
 }
 
 =item do_inform

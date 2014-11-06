@@ -27,7 +27,7 @@ use Net::DHCP::Constants;
 use NetAddr::IP;
 use List::MoreUtils qw(uniq);
 use Readonly;
-use Digest::MD5;
+use Text::CSV;
 
 BEGIN {
     # log4perl init
@@ -48,7 +48,6 @@ use pf::lookup::node;
 use pf::node;
 use pf::os;
 use pf::services::util;
-use pf::stats;
 use pf::util;
 use pf::violation qw(violation_trigger);
 
@@ -82,6 +81,10 @@ my $int;
 my $read_set;
 my $keep_int;
 my $apiclient = pf::api::jsonrpcclient->new;
+my $fh;
+
+open $fh, ">:encoding(utf8)", INSTALL_DIR . "/logs/stats_dhcp.csv";
+my $csv = Text::CSV->new({sep_char => ';',eol => "\r\n"});
 
 # initialization
 # --------------
@@ -366,11 +369,10 @@ sub parse_fingerprint {
     my $fingerprint_data = process_fingerprint($dhcpreq);
 
     if (defined($stat)) {
-        my $stats = pf::stats->new();
-        my $md5 = Digest::MD5->new;
-        $md5->add($mac,$tmp{'dhcp_fingerprint'},$vendor_id);
-        $stats->stats_dhcp($mac,$tmp{'dhcp_fingerprint'},$vendor_id,$tmp{'computername'},$md5->hexdigest);
+        my @row = ($mac,$tmp{'dhcp_fingerprint'},$vendor_id,$tmp{'computername'});
+        $csv->print($fh, \@row);
     }
+
     my $modified_node_log_message = '';
     foreach my $node_key ( keys %tmp ) {
         $modified_node_log_message .= "$node_key = " . $tmp{$node_key} . ",";

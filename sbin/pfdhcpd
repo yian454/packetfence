@@ -82,7 +82,7 @@ my $read_set;
 my $keep_int;
 my $apiclient = pf::api::jsonrpcclient->new;
 my $fh;
-my $csv = Text::CSV->new({sep_char => ';',eol => "\r\n"});
+my $csv = Text::CSV->new({sep_char => '^',eol => "\r\n"});
 
 # initialization
 # --------------

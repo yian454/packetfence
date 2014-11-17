@@ -90,7 +90,7 @@ sub handler {
         my $user_agent = $r->headers_in->{'User-Agent'} || '';
         my $ua_prof = uaprof($r);
         $r->subprocess_env->set(STATS => 1);
-        $r->subprocess_env(STATS => "$mac;$user_agent;$ua_prof;$suites");
+        $r->subprocess_env(STATS => "$mac^$user_agent^$ua_prof^$suites");
     }
 
     # Test if the hostname is include in the proxy_passthroughs configuration

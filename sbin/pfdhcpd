@@ -82,8 +82,6 @@ my $read_set;
 my $keep_int;
 my $apiclient = pf::api::jsonrpcclient->new;
 my $fh;
-
-open $fh, ">:encoding(utf8)", INSTALL_DIR . "/logs/stats_dhcp.csv";
 my $csv = Text::CSV->new({sep_char => ';',eol => "\r\n"});
 
 # initialization
@@ -154,6 +152,9 @@ sub reload_config {
     undef($keep_int);
     undef(%ethernet_inf);
     undef($read_set);
+    close $fh if(defined($fh));
+    open $fh, ">:encoding(utf8)", INSTALL_DIR . "/logs/stats_dhcp.csv";
+
     $read_set = new IO::Select();
     my @ints = uniq(@listen_ints,@dhcplistener_ints);
     foreach $int (@ints) {

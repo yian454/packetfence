@@ -177,7 +177,7 @@ Readonly::Scalar our $ACCOUNTING_POLICY_TIME => 'TimeExpired';
 Readonly::Scalar our $ACCOUNTING_POLICY_BANDWIDTH => 'BandwidthExpired';
 
 
-$default_pid  = "admin";
+$default_pid  = "default";
 
 Readonly our $WIPS_VID => '1100020';
 

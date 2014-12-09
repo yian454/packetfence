@@ -265,7 +265,6 @@ Requires: perl(Net::UDP)
 # For managing the number of connections per device
 Requires: mod_qos
 # Cluster Sync
-Requires: perl(JSON::RPC)
 Requires: haproxy >= 1.5, keepalived >= 1.2
 
 %description -n %{real_name}

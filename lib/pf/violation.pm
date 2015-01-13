@@ -81,7 +81,7 @@ use pf::config;
 use pf::enforcement;
 use pf::db;
 use pf::node;
-use pf::scan qw($SCAN_VID $POST_SCAN_VID);
+use pf::scan qw($SCAN_VID $POST_SCAN_VID $PRE_SCAN_VID);
 use pf::util;
 use pf::client;
 
@@ -430,7 +430,7 @@ sub violation_add {
     if ($latest_vid) {
 
         # don't add a hostscan if violation exists
-        if ( $vid == $SCAN_VID || $vid == $POST_SCAN_VID) {
+        if ( $vid == $SCAN_VID || $vid == $POST_SCAN_VID || $vid == $PRE_SCAN_VID) {
             $logger->warn(
                 "hostscan detected from $mac, but violation $latest_vid exists - ignoring"
             );
@@ -438,7 +438,7 @@ sub violation_add {
         }
 
         #replace UNKNOWN hostscan with known violation
-        if ( $latest_vid == $SCAN_VID || $latest_vid == $POST_SCAN_VID ) {
+        if ( $latest_vid == $SCAN_VID || $latest_vid == $POST_SCAN_VID || $latest_vid == $PRE_SCAN_VID) {
             $logger->info(
                 "violation $vid detected for $mac - updating existing hostscan entry"
             );

@@ -290,6 +290,7 @@ sub dhcpd_handler {
                 } else {
                     # Search for the dhcp config.
                     foreach my $network ( keys %ConfigNetworks ) {
+                        next if ($network =~ /HASH/);
                         my $net_addr2 = NetAddr::IP->new($network,$ConfigNetworks{$network}{'netmask'});
                         if ($net_addr2->contains($ip)) {
                             my $net = $net_addr2->network;
@@ -331,8 +332,8 @@ sub dhcpd_handler {
             if ($messagetype eq DHCPDISCOVER()) {
                 do_discover($dhcpreq,$peeraddr,\$if,\%dhcp_config,\$net_addr,$layer3);
             } elsif ($messagetype eq DHCPREQUEST()) {
-                do_request($dhcpreq,$peeraddr,\$if,\%dhcp_config,\$net_addr,$layer3,$sock_in->sockopt(SO_BROADCAST));
                 parse_fingerprint($mac,$dhcpreq);
+                do_request($dhcpreq,$peeraddr,\$if,\%dhcp_config,\$net_addr,$layer3,$sock_in->sockopt(SO_BROADCAST));
             } elsif ($messagetype eq DHCPINFORM()) {
                 do_inform($dhcpreq,$peeraddr,\$if,\%dhcp_config,\$net_addr,$layer3);
             } elsif ($messagetype eq DHCPRELEASE()) {

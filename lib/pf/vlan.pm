@@ -28,6 +28,7 @@ use pf::authentication;
 use pf::Authentication::constants;
 use pf::Portal::ProfileFactory;
 use pf::vlan::filter;
+use pf::vlan::pool;
 use pf::person;
 use pf::lookup::person;
 
@@ -450,6 +451,8 @@ sub getNormalVlan {
         $logger->info("[$mac] Username was NOT defined or unable to match a role - returning node based role '$role'");
     }
     my $vlan = $switch->getVlanByName($role);
+    my $vlanpool = new pf::vlan::pool;
+    $vlan = $vlanpool->getVlanPool($vlan, $switch, $ifIndex, $mac, $node_info, $connection_type, $user_name, $ssid, $radius_request);
     return ($vlan, $role);
 }
 

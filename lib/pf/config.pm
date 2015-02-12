@@ -70,7 +70,7 @@ our (
     %connection_type, %connection_type_to_str, %connection_type_explained,
     %connection_group, %connection_group_to_str,
     %mark_type_to_str, %mark_type,
-    $thread, $default_pid, $fqdn,
+    $thread, $default_pid, $admin_pid, $fqdn,
     %CAPTIVE_PORTAL,
 #realm.conf
     %ConfigRealm, $cached_realm,
@@ -95,7 +95,7 @@ BEGIN {
         $TRIGGER_TYPE_ACCOUNTING $TRIGGER_TYPE_DETECT $TRIGGER_TYPE_INTERNAL $TRIGGER_TYPE_MAC $TRIGGER_TYPE_NESSUS $TRIGGER_TYPE_OPENVAS $TRIGGER_TYPE_OS $TRIGGER_TYPE_SOH $TRIGGER_TYPE_USERAGENT $TRIGGER_TYPE_VENDORMAC $TRIGGER_TYPE_PROVISIONER @VALID_TRIGGER_TYPES
         $ACCOUNTING_POLICY_TIME $ACCOUNTING_POLICY_BANDWIDTH
         $TRIGGER_ID_PROVISIONER
-        $WIPS_VID $thread $default_pid $fqdn
+        $WIPS_VID $thread $default_pid $admin_pid $fqdn
         $FALSE $TRUE $YES $NO
         $IF_INTERNAL $IF_ENFORCEMENT_VLAN $IF_ENFORCEMENT_INLINE
         $WIRELESS_802_1X $WIRELESS_MAC_AUTH $WIRED_802_1X $WIRED_MAC_AUTH $WIRED_SNMP_TRAPS $UNKNOWN $INLINE
@@ -178,6 +178,7 @@ Readonly::Scalar our $ACCOUNTING_POLICY_BANDWIDTH => 'BandwidthExpired';
 
 
 $default_pid  = "default";
+$admin_pid = "admin";
 
 Readonly our $WIPS_VID => '1100020';
 

@@ -53,7 +53,19 @@ sub handler {
 
     $logger->trace("hitting wispr");
 
+
     my $portalSession = pf::Portal::Session->new();
+    my $mac;
+
+    if (defined($portalSession->getGuestNodeMac)) {
+        $mac = $portalSession->getGuestNodeMac;
+    }
+    else {
+        $mac = $portalSession->getClientMac;
+    }
+
+    my $profile = pf::Portal::ProfileFactory->instantiate($mac);
+    my @sources = ($profile->getInternalSources, $profile->getExclusiveSources );
 
     my $proto = isenabled($Config{'captive_portal'}{'secure_redirect'}) ? $HTTPS : $HTTP;
 
@@ -64,7 +76,6 @@ sub handler {
 
     my %info;
     my $pid;
-    my $mac;
 
     my $stash = {
         'code_result' => "100",
@@ -74,7 +85,7 @@ sub handler {
     # Trace the user in the apache log
     $r->user($req->param("username"));
 
-    my ($return, $message, $source_id) = &pf::web::web_user_authenticate($portalSession,$req->param("username"),$req->param("password"));
+    my ($return, $message, $source_id) = pf::authentication::authenticate( $req->param("username"), $req->param("password"), @sources );
     if ($return) {
         $logger->info("Authentification success for wispr client");
         $stash = {
@@ -82,12 +93,6 @@ sub handler {
                   'result' => "Authentication Success",
                  };
 
-        if (defined($portalSession->getGuestNodeMac)) {
-            $mac = $portalSession->getGuestNodeMac;
-        }
-        else {
-            $mac = $portalSession->getClientMac;
-        }
 
         $info{'pid'} = 'admin';
         $pid = $req->param("username") if (defined $req->param("username"));
@@ -105,33 +110,49 @@ sub handler {
         $params->{SSID} = $locationlog_entry->{'ssid'};
     }
 
+    my $source;
     # obtain node information provided by authentication module. We need to get the role (category here)
     # as web_node_register() might not work if we've reached the limit
-    my $value = &pf::authentication::match($source_id, $params, $Actions::SET_ROLE);
+    my $role = &pf::authentication::match([@sources], $params, $Actions::SET_ROLE, \$source);
 
-    $logger->warn("Got role $value for username $pid");
+    $logger->warn("Got role $role for username $pid");
 
-    # This appends the hashes to one another. values returned by authenticator wins on key collision
-    if (defined $value) {
-        %info = (%info, (category => $value));
-    }
-
-    $value = &pf::authentication::match($source_id, $params, $Actions::SET_ACCESS_DURATION);
-
+    my $value = &pf::authentication::match([@sources], $params, $Actions::SET_ACCESS_DURATION);
     if (defined $value) {
         $logger->trace("No unregdate found - computing it from access duration");
         $value = access_duration($value);
     }
     else {
-        $logger->trace("Unregdate found, we use it right away");
-        $value = &pf::authentication::match($source_id, $params, $Actions::SET_UNREG_DATE);
+        $value = &pf::authentication::match([@sources], $params, $Actions::SET_UNREG_DATE);
+        $value = pf::config::dynamic_unreg_date($value);
     }
 
     $logger->trace("Got unregdate $value for username $pid");
 
     if (defined $value) {
-        %info = (%info, (unregdate => $value));
+        %info = (
+            'unregdate' => $value,
+            'category' => $role,
+            'pid' => $user_name,
+            );
+        if (defined $role) {
+            %info = (%info, (category => $role));
+        }
+        # create a person entry for pid if it doesn't exist
+        if ( !pf::person::person_exist($user_name) ) {
+            $logger->info("creating person $user_name because it doesn't exist");
+            pf::person::person_add($user_name);
+            pf::lookup::person::lookup_person($user_name,$source);
+        } else {
+            $logger->debug("person $user_name already exists");
+        }
+        pf::person::person_modify($user_name,
+           'source'  => $source,
+           'portal'  => $profile->getName,
+        );
+        node_modify($mac,%info);
     }
+
     $r->pnotes->{info}=\%info;
     $template->process( "response_wispr.tt", $stash, \$response ) || $logger->error($template->error());
     $r->content_type('text/xml');

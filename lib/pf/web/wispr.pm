@@ -84,6 +84,7 @@ sub handler {
 
     # Trace the user in the apache log
     $r->user($req->param("username"));
+    my $user_name = $req->param("username");
 
     my ($return, $message, $source_id) = pf::authentication::authenticate( $req->param("username"), $req->param("password"), @sources );
     if ($return) {
@@ -130,11 +131,7 @@ sub handler {
     $logger->trace("Got unregdate $value for username $pid");
 
     if (defined $value) {
-        %info = (
-            'unregdate' => $value,
-            'category' => $role,
-            'pid' => $user_name,
-            );
+        %info = (%info, ('unregdate' => $value));
         if (defined $role) {
             %info = (%info, (category => $role));
         }
